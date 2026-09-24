@@ -131,7 +131,7 @@ def test_report_download_uses_persisted_result_and_audit_metadata(
     )
     assert "Target hit" in targeted_text
     assert "Target miss" in targeted_text
-    assert "realized_cash_flow_total" in targeted_text
+    assert "scenario_factor_mean" in targeted_text
     assert "não garantem efeito causal" in targeted_text
     assert targeted.content != first.content
 

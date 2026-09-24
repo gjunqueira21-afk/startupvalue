@@ -8,8 +8,8 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.auth.security import hash_token
 from app.auth.rate_limit import clear_local_for_tests
+from app.auth.security import hash_token
 from app.db.base import Base, get_db
 from app.db.models import PasswordResetToken, UserSession
 from app.main import app
@@ -227,5 +227,7 @@ def test_reset_expiry_and_failed_delivery(
         "/api/v1/auth/forgot-password", json={"email": "founder-expiry@example.com"}
     ).status_code == 202
     with factory() as db:
-        unused = db.scalars(select(PasswordResetToken).where(PasswordResetToken.used_at.is_(None))).all()
+        unused = db.scalars(
+            select(PasswordResetToken).where(PasswordResetToken.used_at.is_(None))
+        ).all()
         assert unused == []
