@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from app.insights.formatting import compact_money, multiplier, percent, share
+from app.insights.formatting import (
+    compact_money,
+    effect_label,
+    format_unit,
+    multiplier,
+    percent,
+    share,
+)
 
 
 @pytest.mark.parametrize(
@@ -43,3 +50,25 @@ def test_exact_extremes_drop_the_decimal() -> None:
     assert percent(0.0) == "0%"
     assert percent(1.0) == "100%"
     assert percent(0.145) == "14,5%"
+
+
+def test_short_style_for_tiles_and_tables() -> None:
+    assert compact_money(8_400_000.0, "BRL", short=True) == "R$ 8,4 mi"
+    assert compact_money(2_400_000_000.0, "BRL", short=True) == "R$ 2,4 bi"
+    assert compact_money(919_272.0, "BRL", short=True) == "R$ 919 mil"
+
+
+def test_format_unit_follows_the_catalog_unit() -> None:
+    assert format_unit("currency", 9_200_000.0, "BRL") == "R$ 9,2 mi"
+    assert format_unit("ratio", 0.21, "BRL") == "21,0%"
+    assert format_unit("binary", 0.113, "BRL") == "11,3%"
+    assert format_unit("multiplier", 6.45, "BRL") == "6,45x"
+    assert format_unit(None, 3.14159, "BRL") == "3,14"
+
+
+def test_effect_label_uses_cliffs_delta_bands_and_points_for_events() -> None:
+    assert effect_label(0.75, "continuous") == "forte"
+    assert effect_label(-0.36, "continuous") == "moderada"
+    assert effect_label(0.2, "continuous") == "fraca"
+    assert effect_label(0.05, "continuous") == "desprezível"
+    assert effect_label(-0.198, "binary") == "-19,8 p.p."

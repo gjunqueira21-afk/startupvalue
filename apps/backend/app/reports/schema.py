@@ -153,6 +153,71 @@ class RiskSummary(FrozenModel):
     upside_notes: tuple[str, ...] = ()
 
 
+CatalogUnit = Literal["currency", "ratio", "multiplier", "binary"]
+UncertaintyLabel = Literal["LOW", "MODERATE", "HIGH", "VERY HIGH"]
+Text = Annotated[str, Field(min_length=1, max_length=1200)]
+
+
+class KeyDriver(FrozenModel):
+    label: str = Field(min_length=1, max_length=160)
+    contribution: Probability
+    rho: Annotated[float | None, Field(ge=-1.0, le=1.0)] = None
+
+
+class ConditionRow(FrozenModel):
+    label: str = Field(min_length=1, max_length=160)
+    unit: CatalogUnit | None = None
+    hit_value: FiniteNumber
+    miss_value: FiniteNumber
+    effect: str = Field(min_length=1, max_length=40)
+
+
+class TargetNarrative(FrozenModel):
+    probability: Probability
+    wilson95_low: Probability
+    wilson95_high: Probability
+    probability_sentence: Text
+    interpretation: Text
+    statements: tuple[Text, ...] = ()
+    conditions: tuple[ConditionRow, ...] = ()
+    disclaimer: Text
+
+
+class ExecutiveInsight(FrozenModel):
+    """Deterministic executive text produced by app.insights for this result."""
+
+    template_version: str = Field(min_length=1, max_length=32)
+    headline: Text
+    valuation_paragraphs: tuple[Text, ...] = Field(min_length=1)
+    uncertainty_label: UncertaintyLabel
+    uncertainty_label_pt: str = Field(min_length=1, max_length=40)
+    uncertainty_sentence: Text
+    key_drivers_sentence: Text | None = None
+    key_drivers: tuple[KeyDriver, ...] = Field(default=(), max_length=3)
+    upside: tuple[Text, ...] = ()
+    downside: tuple[Text, ...] = ()
+    sensitivity_sentence: Text | None = None
+    risks: tuple[Text, ...] = ()
+    executive_summary: tuple[Text, ...] = Field(min_length=1, max_length=3)
+    method_notes: tuple[Text, ...] = ()
+    target: TargetNarrative | None = None
+
+
+class TornadoBar(FrozenModel):
+    label: str = Field(min_length=1, max_length=160)
+    unit: CatalogUnit | None = None
+    low_level: FiniteNumber
+    high_level: FiniteNumber
+    value_at_low: FiniteNumber
+    value_at_high: FiniteNumber
+    clamped: bool = False
+
+
+class TornadoSection(FrozenModel):
+    base_value: FiniteNumber
+    items: tuple[TornadoBar, ...] = Field(min_length=1)
+
+
 class ReportData(FrozenModel):
     audit: AuditMetadata
     company: CompanySnapshot
@@ -163,6 +228,8 @@ class ReportData(FrozenModel):
     drivers: tuple[Driver, ...] = ()
     target: TargetAnalysis | None = None
     risks: RiskSummary = Field(default_factory=RiskSummary)
+    insight: ExecutiveInsight | None = None
+    tornado: TornadoSection | None = None
     disclaimer: str = Field(min_length=1, max_length=2000)
 
     @model_validator(mode="after")
@@ -179,6 +246,15 @@ class ReportData(FrozenModel):
             tolerance = max(1e-12, 0.5 / self.audit.simulation_count)
             if abs(observed - self.target.probability) > tolerance:
                 raise ValueError("target probability must agree with hit_count/simulation_count")
+        if self.insight is not None:
+            if self.insight.uncertainty_label != self.valuation.uncertainty_label:
+                raise ValueError("insight uncertainty label must match the valuation summary")
+            if (
+                self.insight.target is not None
+                and self.target is not None
+                and abs(self.insight.target.probability - self.target.probability) > 1e-9
+            ):
+                raise ValueError("insight target probability must agree with the target analysis")
         for driver in self.drivers:
             if driver.status == "estimated" and driver.association is None:
                 raise ValueError("estimated drivers require an association")

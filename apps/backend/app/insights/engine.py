@@ -305,7 +305,8 @@ def _sensitivity(ctx: _Context) -> str | None:
     )
 
 
-def _condition_variables(factors: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
+def condition_variables(factors: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Variables compared in What needs to be true (outcomes, ranged parameters, failure)."""
     _, outcomes = split_by_role(factors)
     if not outcomes:
         return dict(factors)
@@ -343,7 +344,7 @@ def _statement(ctx: _Context, condition: Condition, base_rate: float) -> str:
 
 
 def _target(ctx: _Context, target: float) -> TargetInsight:
-    result = target_conditions(_condition_variables(ctx.factors), ctx.values, target)
+    result = target_conditions(condition_variables(ctx.factors), ctx.values, target)
     n, hits = ctx.count, result.hit_count
     low, high = wilson_interval(hits, n)
     goal = ctx.money(target)

@@ -8,11 +8,14 @@ from app.db.models import Scenario, ScenarioRevision, Simulation, SimulationResu
 from app.decision.catalog import describe
 from app.decision.targets import ConditionalStatistics
 from app.decision.targets import TargetAnalysis as CalculatedTargetAnalysis
+from app.insights.engine import InsightReport
+from app.insights.formatting import effect_label
 from app.services.simulation import with_uncertainty
 
 from .schema import ReportData
 
-REPORT_TEMPLATE_VERSION = "1.0.0"
+REPORT_TEMPLATE_VERSION = "1.1.0"
+BASIS_LABELS = {"DCF equity value (signed)": "Equity via DCF · inclui valores negativos"}
 
 
 def _profile_text(profile: dict[str, Any], key: str, limit: int) -> str | None:
@@ -72,6 +75,80 @@ def _conditional_payload(statistics: ConditionalStatistics) -> dict[str, float] 
     return {"p25": statistics.p25, "median": statistics.p50, "p75": statistics.p75}
 
 
+def _insight_payload(
+    report: InsightReport, ranking: dict[str, Any]
+) -> dict[str, Any]:
+    rho_by_name = {item["name"]: item["rho"] for item in ranking.get("items", [])}
+    target = report.target
+    return {
+        "template_version": report.template_version,
+        "headline": report.headline,
+        "valuation_paragraphs": report.valuation_paragraphs,
+        "uncertainty_label": report.uncertainty.label,
+        "uncertainty_label_pt": report.uncertainty.label_pt,
+        "uncertainty_sentence": report.uncertainty.sentence,
+        "key_drivers_sentence": report.key_drivers_sentence,
+        "key_drivers": [
+            {
+                "label": driver.label,
+                "contribution": driver.contribution,
+                "rho": rho_by_name.get(driver.name),
+            }
+            for driver in report.key_drivers
+        ],
+        "upside": [item.text for item in report.upside],
+        "downside": [item.text for item in report.downside],
+        "sensitivity_sentence": report.sensitivity_sentence,
+        "risks": report.risks,
+        "executive_summary": report.executive_summary,
+        "method_notes": report.method_notes,
+        "target": (
+            {
+                "probability": target.probability,
+                "wilson95_low": target.wilson95_low,
+                "wilson95_high": target.wilson95_high,
+                "probability_sentence": target.probability_sentence,
+                "interpretation": target.interpretation,
+                "statements": target.statements,
+                "conditions": [
+                    {
+                        "label": condition.label,
+                        "unit": condition.unit,
+                        "hit_value": condition.hit_value,
+                        "miss_value": condition.miss_value,
+                        "effect": effect_label(condition.cliffs_delta, condition.kind),
+                    }
+                    for condition in target.conditions
+                ],
+                "disclaimer": target.disclaimer,
+            }
+            if target is not None
+            else None
+        ),
+    }
+
+
+def _tornado_payload(summary: dict[str, Any]) -> dict[str, Any] | None:
+    stored = summary.get("sensitivity")
+    if not isinstance(stored, dict) or not stored.get("items"):
+        return None
+    return {
+        "base_value": stored["base_value"],
+        "items": [
+            {
+                "label": describe(item["parameter"]).label,
+                "unit": describe(item["parameter"]).unit,
+                "low_level": item["low_level"],
+                "high_level": item["high_level"],
+                "value_at_low": item["value_at_low"],
+                "value_at_high": item["value_at_high"],
+                "clamped": item["clamped"],
+            }
+            for item in stored["items"]
+        ],
+    }
+
+
 def _report_unit(unit: str | None, currency: str) -> str | None:
     return {"currency": currency, "ratio": "%", "multiplier": "x", "binary": "0/1"}.get(
         unit or ""
@@ -87,6 +164,7 @@ def report_from_result(
     startup: Startup,
     drivers: dict[str, Any] | None = None,
     target: CalculatedTargetAnalysis | None = None,
+    insight: InsightReport | None = None,
 ) -> ReportData:
     """Use saved values only; no valuation or random draw occurs here."""
 
@@ -117,7 +195,7 @@ def report_from_result(
             "currency": startup.currency,
         },
         "valuation": {
-            "basis": summary["basis"],
+            "basis": BASIS_LABELS.get(summary["basis"], summary["basis"]),
             "percentiles": summary["percentiles"],
             "mean": summary["mean"],
             "standard_deviation": summary["standard_deviation"],
@@ -171,6 +249,8 @@ def report_from_result(
             if target is not None
             else None
         ),
+        "insight": _insight_payload(insight, ranking) if insight is not None else None,
+        "tornado": _tornado_payload(summary) if insight is not None else None,
         "risks": {
             "limitations": (
                 "As premissas e a distribuição são estimativas, não preços de transação.",

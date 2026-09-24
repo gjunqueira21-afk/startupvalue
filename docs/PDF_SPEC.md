@@ -1,6 +1,6 @@
 # StartupValue — Especificação do relatório PDF
 
-Estado: design de informação anterior à implementação. O PDF é um artefato institucional A4 gerado de `SimulationResult`; não é impressão da página e nunca recalcula Monte Carlo.
+Estado: implementado (template 1.1.0). O Executive Summary e as seções Drivers, What Needs to Be True e Risk & Sensitivity usam o bloco `insight` gerado por `app/insights` (mesmo texto do dashboard) e o tornado persistido; relatórios sem snapshot mantêm o resumo tabular anterior. O PDF é um artefato institucional A4 gerado de `SimulationResult`; não é impressão da página e nunca recalcula Monte Carlo.
 
 ## Contrato
 

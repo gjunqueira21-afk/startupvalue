@@ -138,7 +138,7 @@ def test_report_pdf_uses_persisted_result_values_and_audit_metadata() -> None:
     assert "R$ 8.400.000,00" in text
     assert "R$ 6.100.000,00 - R$ 11.700.000,00" in text
     assert "27,4%" in text
-    assert "2740" in text
+    assert "2.740" in text
     assert "sim-471829-alpha" in text
     assert "result-immutable-001" in text
     assert "3.0.0-dev" in text

@@ -119,7 +119,9 @@ def test_report_download_uses_persisted_result_and_audit_metadata(
     assert "Venture Capital Method não foi calculado" in text
     assert "Fluxo de caixa vs. plano" in text
     assert "scenario_factor_mean" not in text
-    assert str(saved["summary"]["uncertainty_label"]) in text  # type: ignore[index]
+    label = str(saved["summary"]["uncertainty_label"])  # type: ignore[index]
+    portuguese = {"LOW": "Baixa", "MODERATE": "Moderada", "HIGH": "Alta", "VERY HIGH": "Muito alta"}
+    assert portuguese[label] in text
     assert "NOT AVAILABLE" not in text
 
     from app.reports.narrative import format_money
@@ -132,10 +134,10 @@ def test_report_download_uses_persisted_result_and_audit_metadata(
     targeted_text = "\n".join(
         page.extract_text() or "" for page in PdfReader(BytesIO(targeted.content)).pages
     )
-    assert "Target hit" in targeted_text
-    assert "Target miss" in targeted_text
+    assert "Cenários que atingem" in targeted_text
+    assert "Cenários que não atingem" in targeted_text
     assert "Fluxo de caixa vs. plano" in targeted_text
-    assert "não garantem efeito causal" in targeted_text
+    assert "não relações de causa e efeito" in " ".join(targeted_text.split())
     assert targeted.content != first.content
 
 
@@ -199,6 +201,28 @@ def test_structured_report_formats_business_metrics_in_their_units(
     assert "Margem EBITDA do Ano 5" in text
     assert "revenue_year5_operating" not in text
     assert format_money(revenue["hit"]["p50"], "BRL") in text
+
+    pages = [
+        " ".join((page.extract_text() or "").split())
+        for page in PdfReader(BytesIO(report.content)).pages
+    ]
+    insight = owner.get(
+        f"/api/v1/simulations/{simulation_id}/insight", params={"target": target}
+    ).json()
+    summary_page = pages[1]
+    for label in ("ESTIMATED VALUATION", "PROBABILITY OF TARGET", "TOP VALUATION DRIVERS"):
+        assert label in summary_page
+    # Same deterministic text as the dashboard: the PDF never rewrites the insight.
+    assert insight["executive_summary"][0] in summary_page
+    assert insight["key_drivers"][0]["label"] in summary_page
+    target_page = next(page for page in pages if "What Needs to Be True?" in page)
+    # Latent shocks are redundant with outcome metrics; the target tables use the insight's set.
+    assert "Receita vs. plano" not in target_page
+    risk_page = next(page for page in pages if "Risk & Sensitivity" in page)
+    assert "Sensibilidade (tornado)" in risk_page
+    assert "WACC" in risk_page
+    assert "Equity via DCF" in " ".join(pages)
+    assert all("NOT AVAILABLE" not in page for page in pages)
 
 
 def test_report_download_requires_session_and_workspace(

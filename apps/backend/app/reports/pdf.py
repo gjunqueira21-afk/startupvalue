@@ -26,7 +26,14 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from .narrative import executive_narrative, format_money, format_percent
+from .insight_pdf import (
+    driver_blocks,
+    executive_summary_blocks,
+    sensitivity_blocks,
+    target_blocks,
+    text,
+)
+from .narrative import executive_narrative, format_integer, format_money, format_percent
 from .schema import Histogram, MethodAnalysis, PercentileKey, ReportData
 
 INK = colors.HexColor("#10231E")
@@ -87,6 +94,15 @@ class _HistogramChart(Flowable):
             canvas.rect(legend_x, 55 * mm, 5 * mm, 1.2 * mm, stroke=0, fill=1)
             canvas.drawString(legend_x + 7 * mm, 53.5 * mm, name.upper())
 
+        if start < 0 < end:
+            # Zero divides value-destroying scenarios from the rest; mark and label it.
+            zero_x = plot_left + plot_width * (-start) / (end - start)
+            canvas.setStrokeColor(colors.HexColor("#C43D4B"))
+            canvas.setLineWidth(1.2)
+            canvas.line(zero_x, plot_bottom, zero_x, plot_top + 1 * mm)
+            canvas.setFillColor(MUTED)
+            canvas.setFont("Helvetica", 7)
+            canvas.drawString(zero_x + 1.2 * mm, plot_bottom + 1.2 * mm, "R$ 0")
         canvas.setFillColor(MUTED)
         canvas.setFont("Helvetica", 7)
         canvas.drawString(plot_left, 2 * mm, format_money(start, self.currency))
@@ -157,6 +173,85 @@ def _styles() -> dict[str, ParagraphStyle]:
             alignment=TA_RIGHT,
             textColor=INK,
         ),
+        "lead": ParagraphStyle(
+            "SVLead",
+            parent=base["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=12,
+            leading=16,
+            textColor=INK,
+            spaceAfter=4,
+        ),
+        "body_lead": ParagraphStyle(
+            "SVBodyLead",
+            parent=base["BodyText"],
+            fontName="Helvetica",
+            fontSize=10,
+            leading=14.5,
+            textColor=INK,
+            spaceAfter=7,
+        ),
+        "kpi_label": ParagraphStyle(
+            "SVKpiLabel",
+            parent=base["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=7.2,
+            leading=9,
+            textColor=GREEN,
+        ),
+        "kpi_value": ParagraphStyle(
+            "SVKpiValue",
+            parent=base["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=15,
+            leading=19,
+            textColor=INK,
+            spaceBefore=3,
+        ),
+        "kpi_hero": ParagraphStyle(
+            "SVKpiHero",
+            parent=base["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=17,
+            leading=21,
+            textColor=GREEN,
+            spaceBefore=3,
+        ),
+        "kpi_range": ParagraphStyle(
+            "SVKpiRange",
+            parent=base["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=12.5,
+            leading=19,
+            textColor=INK,
+            spaceBefore=3,
+        ),
+        "kpi_value_small": ParagraphStyle(
+            "SVKpiValueSmall",
+            parent=base["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=10,
+            leading=12,
+            textColor=INK,
+        ),
+        "kpi_caption": ParagraphStyle(
+            "SVKpiCaption",
+            parent=base["BodyText"],
+            fontName="Helvetica",
+            fontSize=7.2,
+            leading=9.4,
+            textColor=MUTED,
+            spaceBefore=2,
+        ),
+        "num": ParagraphStyle(
+            "SVNum",
+            parent=base["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=9,
+            leading=11,
+            alignment=TA_RIGHT,
+            textColor=INK,
+        ),
         "cover": ParagraphStyle(
             "SVCover",
             parent=base["BodyText"],
@@ -167,6 +262,13 @@ def _styles() -> dict[str, ParagraphStyle]:
             textColor=MUTED,
         ),
     }
+
+
+DRIVER_STATUS = {
+    "estimated": "estimado",
+    "not_estimable_constant": "constante",
+    "insufficient_data": "dados insuficientes",
+}
 
 
 def _table(rows: list[list[Any]], widths: list[float] | None = None) -> Table:
@@ -262,26 +364,11 @@ def _document(
     return document
 
 
-def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[Any]:
+def _legacy_summary(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[Any]:
+    """Summary table for reports built without the executive insight block."""
     currency = data.company.currency
     p = data.valuation.percentiles
-    audit = data.audit
     story: list[Any] = [
-        Spacer(1, 39 * mm),
-        Paragraph("STARTUPVALUE", styles["title"]),
-        Paragraph("Valuation &amp; Monte Carlo Analysis", styles["cover"]),
-        Spacer(1, 21 * mm),
-        Paragraph(escape(data.company.name), styles["metric"]),
-        Paragraph(f"Cenário: {escape(data.company.scenario_name)}", styles["cover"]),
-        Paragraph(f"Data-base: {audit.analysis_date.isoformat()}", styles["cover"]),
-        Spacer(1, 33 * mm),
-        Paragraph("CONFIDENCIAL", styles["cover"]),
-        Spacer(1, 14 * mm),
-        Paragraph(f"Simulation ID: {audit.simulation_id}", styles["small"]),
-        Paragraph(f"Simulation Result ID: {audit.simulation_result_id}", styles["small"]),
-        Paragraph(f"Result checksum: {audit.result_hash}", styles["small"]),
-        PageBreak(),
-        Paragraph("Executive Summary", styles["h1"]),
         _table(
             [
                 ["Métrica", "Resultado"],
@@ -303,6 +390,34 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
         Spacer(1, 7 * mm),
     ]
     story.extend(Paragraph(escape(text), styles["body"]) for text in executive_narrative(data))
+    return story
+
+
+def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[Any]:
+    currency = data.company.currency
+    p = data.valuation.percentiles
+    audit = data.audit
+    story: list[Any] = [
+        Spacer(1, 39 * mm),
+        Paragraph("STARTUPVALUE", styles["title"]),
+        Paragraph("Valuation &amp; Monte Carlo Analysis", styles["cover"]),
+        Spacer(1, 21 * mm),
+        Paragraph(escape(data.company.name), styles["metric"]),
+        Paragraph(f"Cenário: {escape(data.company.scenario_name)}", styles["cover"]),
+        Paragraph(f"Data-base: {audit.analysis_date.isoformat()}", styles["cover"]),
+        Spacer(1, 33 * mm),
+        Paragraph("CONFIDENCIAL", styles["cover"]),
+        Spacer(1, 14 * mm),
+        Paragraph(f"Simulation ID: {audit.simulation_id}", styles["small"]),
+        Paragraph(f"Simulation Result ID: {audit.simulation_result_id}", styles["small"]),
+        Paragraph(f"Result checksum: {audit.result_hash}", styles["small"]),
+        PageBreak(),
+        Paragraph("Executive Summary", styles["h1"]),
+    ]
+    if data.insight is not None:
+        story.extend(executive_summary_blocks(data, styles))
+    else:
+        story.extend(_legacy_summary(data, styles))
     percentile_keys: tuple[PercentileKey, ...] = (
         "p5",
         "p10",
@@ -343,12 +458,20 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
         [
             PageBreak(),
             Paragraph("Monte Carlo Distribution", styles["h1"]),
-            Paragraph(
-                "Os percentis incluem todos os resultados simulados, inclusive valores "
-                "não positivos e estados de falha.",
-                styles["body"],
-            ),
         ]
+    )
+    if data.insight is not None:
+        story.append(Paragraph("Valuation insight", styles["h2"]))
+        story.extend(
+            Paragraph(text(item), styles["body"]) for item in data.insight.valuation_paragraphs
+        )
+        story.append(Paragraph(text(data.insight.uncertainty_sentence), styles["body"]))
+    story.append(
+        Paragraph(
+            "Os percentis incluem todos os resultados simulados, inclusive valores "
+            "não positivos e estados de falha.",
+            styles["small"],
+        )
     )
     if data.valuation.histogram is not None:
         story.extend(
@@ -392,15 +515,20 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
         [PageBreak(), *_method_section("Venture Capital Method", data.venture_capital, styles)]
     )
     story.extend([PageBreak(), Paragraph("Valuation Drivers", styles["h1"])])
+    if data.insight is not None:
+        story.extend(driver_blocks(data, styles))
+        story.append(Paragraph("Detalhe dos coeficientes", styles["h2"]))
     if data.drivers:
         driver_rows: list[list[Any]] = [["Driver", "Participação", "Spearman", "N", "Status"]]
         driver_rows.extend(
             [
                 Paragraph(escape(driver.name), styles["small"]),
                 "N/A" if driver.contribution is None else format_percent(driver.contribution),
-                "N/A" if driver.association is None else f"{driver.association:+.3f}",
-                str(driver.sample_size),
-                driver.status,
+                "N/A"
+                if driver.association is None
+                else f"{driver.association:+.3f}".replace(".", ","),
+                format_integer(driver.sample_size),
+                DRIVER_STATUS.get(driver.status, driver.status),
             ]
             for driver in data.drivers
         )
@@ -426,22 +554,39 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
                 _table(
                     [
                         ["Métrica", "Resultado"],
-                        ["Target valuation", format_money(target.target_value, currency)],
+                        ["Valuation-alvo", format_money(target.target_value, currency)],
                         ["Probabilidade de atingir", format_percent(target.probability)],
-                        ["Target hit", str(target.hit_count)],
-                        ["Target miss", str(target.miss_count)],
+                        ["Cenários que atingem", format_integer(target.hit_count)],
+                        ["Cenários que não atingem", format_integer(target.miss_count)],
+                        *(
+                            [
+                                [
+                                    "Erro Monte Carlo (IC 95%)",
+                                    f"{format_percent(data.insight.target.wilson95_low)} a "
+                                    f"{format_percent(data.insight.target.wilson95_high)}",
+                                ]
+                            ]
+                            if data.insight is not None and data.insight.target is not None
+                            else []
+                        ),
                     ],
                     [85 * mm, 84 * mm],
                 ),
                 Spacer(1, 6 * mm),
             ]
         )
+        if data.insight is not None and data.insight.target is not None:
+            story.extend(target_blocks(data, styles))
+            story.append(
+                Paragraph("Distribuição das condições (P25 / mediana / P75)", styles["h2"])
+            )
         if target.metrics:
             target_rows: list[list[Any]] = [["Parâmetro", "Grupo", "P25", "Mediana", "P75"]]
-            for metric in target.metrics:
+            # Quartiles of a 0/1 event carry no information; its rate is in the table above.
+            for metric in (item for item in target.metrics if item.unit != "0/1"):
                 for label, distribution in (
-                    ("Target hit", metric.target_hit),
-                    ("Target miss", metric.target_miss),
+                    ("Atinge a meta", metric.target_hit),
+                    ("Demais", metric.target_miss),
                 ):
                     if distribution is not None:
                         target_rows.append(
@@ -456,18 +601,28 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
             story.append(_table(target_rows, [48 * mm, 35 * mm, 28 * mm, 30 * mm, 28 * mm]))
             story.append(
                 Paragraph(
-                    "As diferenças entre grupos são condicionais aos cenários simulados "
+                    escape(data.insight.target.disclaimer)
+                    if data.insight is not None and data.insight.target is not None
+                    else "As diferenças entre grupos são condicionais aos cenários simulados "
                     "e não garantem efeito causal.",
                     styles["body"],
                 )
             )
     story.extend([PageBreak(), Paragraph("Risk &amp; Sensitivity", styles["h1"])])
-    risk_sections = (
-        ("Warnings", data.risks.warnings),
-        ("Downside drivers", data.risks.downside_notes),
-        ("Upside drivers", data.risks.upside_notes),
-        ("Limitations", data.risks.limitations),
-    )
+    risk_sections: tuple[tuple[str, tuple[str, ...]], ...]
+    if data.insight is not None:
+        story.extend(sensitivity_blocks(data, styles))
+        risk_sections = (
+            ("Warnings", data.risks.warnings),
+            ("Limitations", data.risks.limitations),
+        )
+    else:
+        risk_sections = (
+            ("Warnings", data.risks.warnings),
+            ("Downside drivers", data.risks.downside_notes),
+            ("Upside drivers", data.risks.upside_notes),
+            ("Limitations", data.risks.limitations),
+        )
     for title, entries in risk_sections:
         story.append(Paragraph(title, styles["h2"]))
         if entries:
@@ -484,6 +639,10 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
                 "propaga premissas incertas por trajetórias "
                 "reprodutíveis. Percentis resumem a distribuição simulada; não são garantias.",
                 styles["body"],
+            ),
+            *(
+                Paragraph(f"• {escape(note)}", styles["body"])
+                for note in (data.insight.method_notes if data.insight is not None else ())
             ),
             _table(
                 [
