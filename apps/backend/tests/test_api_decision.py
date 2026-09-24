@@ -89,6 +89,11 @@ def test_decision_reads_persisted_vectors_and_is_workspace_scoped(
     simulation_id = str(run["simulation_id"])
     summary = run["summary"]
     assert isinstance(summary, dict)
+    assert run["company_name"] == "Decision Co"
+    assert run["scenario_name"] == "Base"
+    assert run["currency"] == "BRL"
+    reread = owner.get(f"/api/v1/simulations/{simulation_id}").json()
+    assert (reread["company_name"], reread["scenario_name"]) == ("Decision Co", "Base")
     histogram = summary["histogram"]
     assert isinstance(histogram, dict)
     assert sum(histogram["counts"]) == 1000

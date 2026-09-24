@@ -48,8 +48,30 @@ from app.services.simulation import (
 router = APIRouter(prefix="/api/v1", tags=["simulations"])
 
 
-def _response(simulation: Simulation, result: SimulationResult | None) -> SimulationResponse:
+def _identity(db: Database, simulation: Simulation) -> tuple[str | None, str | None, str]:
+    """Company, scenario and currency of the revision this simulation ran on."""
+    row = db.execute(
+        select(Startup.name, Scenario.name, Startup.currency)
+        .join(Scenario, Scenario.startup_id == Startup.id)
+        .join(ScenarioRevision, ScenarioRevision.scenario_id == Scenario.id)
+        .where(
+            ScenarioRevision.id == simulation.scenario_revision_id,
+            ScenarioRevision.workspace_id == simulation.workspace_id,
+            Scenario.workspace_id == simulation.workspace_id,
+            Startup.workspace_id == simulation.workspace_id,
+        )
+    ).one_or_none()
+    return (row[0], row[1], row[2]) if row else (None, None, "BRL")
+
+
+def _response(
+    db: Database, simulation: Simulation, result: SimulationResult | None
+) -> SimulationResponse:
+    company_name, scenario_name, currency = _identity(db, simulation)
     return SimulationResponse(
+        company_name=company_name,
+        scenario_name=scenario_name,
+        currency=currency,
         simulation_id=simulation.id,
         scenario_revision_id=simulation.scenario_revision_id,
         model_version=simulation.model_version,
@@ -125,7 +147,7 @@ def _run(
     db.commit()
     db.refresh(simulation)
     db.refresh(result)
-    return _response(simulation, result)
+    return _response(db, simulation, result)
 
 
 @router.get("/simulations/{simulation_id}", response_model=SimulationResponse)
@@ -141,7 +163,7 @@ def read_simulation(simulation_id: str, db: Database, actor: Actor) -> Simulatio
             SimulationResult.simulation_id == simulation.id,
         )
     )
-    return _response(simulation, result)
+    return _response(db, simulation, result)
 
 
 def _decision_source(
@@ -237,20 +259,12 @@ def read_insight(
         raise HTTPException(
             status.HTTP_500_INTERNAL_SERVER_ERROR, "simulation_samples_integrity_error"
         ) from exc
-    currency = db.scalar(
-        select(Startup.currency)
-        .join(Scenario, Scenario.startup_id == Startup.id)
-        .join(ScenarioRevision, ScenarioRevision.scenario_id == Scenario.id)
-        .where(
-            ScenarioRevision.id == simulation.scenario_revision_id,
-            Startup.workspace_id == actor.workspace_id,
-        )
-    )
+    _, _, currency = _identity(db, simulation)
     report = build_insight(
         summary=with_uncertainty(result.summary),
         valuations=valuations,
         factors=factors,
-        currency=currency or "BRL",
+        currency=currency,
         target=target,
     )
     return InsightResponse.model_validate(

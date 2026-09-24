@@ -518,6 +518,9 @@ class SimulationResponse(ApiModel):
     seed: int
     simulation_count: int
     status: str
+    company_name: str | None = None
+    scenario_name: str | None = None
+    currency: str = "BRL"
     execution: Literal["synchronous"] = "synchronous"
     queue_status: Literal["not_configured"] = "not_configured"
     summary: SimulationSummary | None

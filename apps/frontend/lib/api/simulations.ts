@@ -68,6 +68,28 @@ export interface Driver extends RankedDriverSummary {
   count: number;
 }
 
+export interface TornadoItem {
+  parameter: "annual_wacc" | "terminal_growth" | "exit_multiple" | "failure_probability";
+  label: string;
+  unit: VariableUnit | null;
+  base_level: number;
+  low_level: number;
+  high_level: number;
+  value_at_low: number;
+  value_at_high: number;
+  swing: number;
+  level_source: "base_plus_minus_delta" | "distribution_p10_p90";
+  clamped: boolean;
+}
+
+export interface TornadoResponse {
+  method: "one_at_a_time_common_random_numbers";
+  method_version: string;
+  statistic: "p50";
+  base_value: number;
+  items: TornadoItem[];
+}
+
 export interface DecisionResponse {
   simulation_id: string;
   result_hash: string;
@@ -79,37 +101,67 @@ export interface DecisionResponse {
   r_squared: number | null;
   warnings: string[];
   drivers: Driver[];
+  tornado: TornadoResponse | null;
 }
 
-export interface ConditionalStats {
-  count: number;
-  p25: number | null;
-  p50: number | null;
-  p75: number | null;
-  reason: string | null;
+export interface TailInsight {
+  name: string;
+  label: string;
+  kind: "continuous" | "binary";
+  direction: "higher" | "lower";
+  text: string;
 }
 
-export interface TargetResponse {
+export interface ConditionInsight {
+  name: string;
+  label: string;
+  unit: VariableUnit | null;
+  kind: "continuous" | "binary";
+  direction: "higher" | "lower";
+  hit_value: number;
+  miss_value: number;
+  cliffs_delta: number;
+  threshold: number | null;
+}
+
+export interface TargetInsight {
   target: number;
   probability: number;
   hit_count: number;
-  miss_count: number;
   scenario_count: number;
   wilson95_low: number;
   wilson95_high: number;
-  comparisons: {
-    name: string;
-    label: string;
-    unit: VariableUnit | null;
-    role: "driver" | "outcome";
-    hit: ConditionalStats;
-    miss: ConditionalStats;
-    median_difference_hit_minus_miss: number | null;
-    status: string;
-  }[];
+  sample_note: "ok" | "small_group" | "insufficient" | "empty_group";
+  headline: string;
+  probability_sentence: string;
+  interpretation: string;
+  statements: string[];
+  conditions: ConditionInsight[];
+  disclaimer: string;
+}
+
+export interface InsightResponse {
+  simulation_id: string;
+  result_hash: string;
+  template_version: string;
+  headline: string;
+  valuation_paragraphs: string[];
+  uncertainty: { label: UncertaintyLabel; label_pt: string; reason: string; sentence: string };
+  key_drivers_sentence: string | null;
+  key_drivers: { name: string; label: string; contribution: number; direction: string | null }[];
+  upside: TailInsight[];
+  downside: TailInsight[];
+  sensitivity_sentence: string | null;
+  risks: string[];
+  target: TargetInsight | null;
+  executive_summary: string[];
+  method_notes: string[];
 }
 
 export interface SimulationResponse extends CreateSimulationResponse {
+  company_name: string | null;
+  scenario_name: string | null;
+  currency: string;
   execution: "synchronous";
   queue_status: "not_configured";
   summary: SimulationSummary | null;
@@ -356,8 +408,10 @@ export function getDecision(simulationId: string, signal?: AbortSignal) {
   });
 }
 
-export function getTarget(simulationId: string, target: number, signal?: AbortSignal) {
-  return apiRequest<TargetResponse>(`/api/v1/simulations/${simulationId}/target?value=${encodeURIComponent(target)}`, {
+
+export function getInsight(simulationId: string, target: number | null, signal?: AbortSignal) {
+  const query = target === null ? "" : `?target=${encodeURIComponent(target)}`;
+  return apiRequest<InsightResponse>(`/api/v1/simulations/${simulationId}/insight${query}`, {
     method: "GET", signal,
   });
 }
