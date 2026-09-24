@@ -89,6 +89,35 @@ CATALOG: dict[str, VariableSpec] = {
             "ratio",
             "Taxa composta anual entre a receita do Ano 1 e a do Ano 5.",
         ),
+        # Valuation parameters: drivers only when the user gives them a range.
+        _spec(
+            "annual_wacc",
+            "driver",
+            "WACC",
+            "ratio",
+            "Custo médio ponderado de capital anual usado para descontar os fluxos.",
+        ),
+        _spec(
+            "terminal_growth",
+            "driver",
+            "Crescimento na perpetuidade (g)",
+            "ratio",
+            "Crescimento anual do fluxo normalizado após o Ano 5 (método de Gordon).",
+        ),
+        _spec(
+            "exit_multiple",
+            "driver",
+            "Múltiplo de saída",
+            "multiplier",
+            "Múltiplo aplicado à receita ou ao EBITDA do Ano 5 para o valor terminal.",
+        ),
+        _spec(
+            "failure_probability",
+            "driver",
+            "Probabilidade de encerramento",
+            "ratio",
+            "Premissa de probabilidade de encerramento no horizonte (usada no tornado).",
+        ),
         # Simple (FCFF) model.
         _spec(
             "scenario_factor_mean",

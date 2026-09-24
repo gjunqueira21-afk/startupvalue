@@ -4,14 +4,16 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { createSimulation } from "@/lib/api/simulations";
-import { DEFAULT_DRAFT, DRAFT_STORAGE_KEY, UNCERTAINTY_PRESETS, freshDraft } from "./defaults";
+import { DEFAULT_DRAFT, DRAFT_STORAGE_KEY, UNCERTAINTY_PRESETS, freshDraft, hydrateDraft } from "./defaults";
 import { RevenueChart } from "./revenue-chart";
 import type {
   CompanyInputs,
   MonteCarloAssumptions,
   OperatingCostKey,
+  RangeInput,
   StartupMetrics,
   ValuationAssumptions,
+  ValuationRanges,
   ValuationWizardDraft,
   ValidationErrors,
   WizardMode,
@@ -80,6 +82,33 @@ function NumberField({ id, label, value, onChange, error, suffix, hint, min, max
   );
 }
 
+function RangeControl({ id, label, unit, mostLikely, range, onChange, error }: {
+  id: string;
+  label: string;
+  unit: string;
+  mostLikely: number;
+  range: RangeInput;
+  onChange: (patch: Partial<RangeInput>) => void;
+  error?: string;
+}) {
+  return (
+    <div className={styles.rangeControl}>
+      <label className={styles.checkboxLabel} htmlFor={`${id}-enabled`}>
+        <input id={`${id}-enabled`} type="checkbox" checked={range.enabled} onChange={(event) => onChange({ enabled: event.target.checked })} />
+        Usar faixa de incerteza para {label}
+      </label>
+      {range.enabled && (
+        <div className={styles.grid3}>
+          <NumberField id={`${id}-min`} label="Mínimo" value={range.minimum} step={0.1} onChange={(value) => onChange({ minimum: value ?? 0 })} suffix={unit} />
+          <div className={styles.field}><span className={styles.groupLabel}>Mais provável</span><output className={styles.mostLikely} htmlFor={id}>{mostLikely} {unit}</output><small>Valor informado no campo principal.</small></div>
+          <NumberField id={`${id}-max`} label="Máximo" value={range.maximum} step={0.1} onChange={(value) => onChange({ maximum: value ?? 0 })} suffix={unit} />
+        </div>
+      )}
+      {error && <span className={styles.error} role="alert">{error}</span>}
+    </div>
+  );
+}
+
 function ReviewCard({ title, onEdit, children, wide = false }: { title: string; onEdit: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
     <article className={`${styles.reviewCard} ${wide ? styles.reviewCardWide : ""}`}>
@@ -111,8 +140,8 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
     try {
       const stored = window.localStorage.getItem(DRAFT_STORAGE_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored) as Partial<ValuationWizardDraft>;
-        if (parsed.schemaVersion === 1) setDraft(parsed as ValuationWizardDraft);
+        const restored = hydrateDraft(JSON.parse(stored));
+        if (restored) setDraft(restored);
       }
       setSaveState(stored ? "Rascunho recuperado neste dispositivo" : "Novo rascunho local");
     } catch {
@@ -146,6 +175,15 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
   };
   const updateValuation = <K extends keyof ValuationAssumptions>(key: K, value: ValuationAssumptions[K]) => {
     setDraft((current) => ({ ...current, valuation: { ...current.valuation, [key]: value } }));
+  };
+  const updateRange = (key: keyof ValuationRanges, patch: Partial<RangeInput>) => {
+    setDraft((current) => ({
+      ...current,
+      valuation: {
+        ...current.valuation,
+        ranges: { ...current.valuation.ranges, [key]: { ...current.valuation.ranges[key], ...patch } },
+      },
+    }));
   };
   const updateMonteCarlo = <K extends keyof MonteCarloAssumptions>(key: K, value: MonteCarloAssumptions[K]) => {
     setDraft((current) => ({ ...current, monteCarlo: { ...current.monteCarlo, [key]: value } }));
@@ -268,10 +306,27 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
           ["maduro", "Maior previsibilidade", "Operação mais consolidada", 18, 30],
         ].map(([id, label, description, wacc, targetReturn]) => <button type="button" key={id} className={`${styles.optionButton} ${draft.valuation.wacc === wacc ? styles.selected : ""}`} onClick={() => setDraft((current) => ({ ...current, valuation: { ...current.valuation, wacc: Number(wacc), vcTargetReturn: Number(targetReturn) } }))}><strong>{label}</strong><small>{description}</small></button>)}</div></section>
         <section className={styles.sectionBlock}><h3>Rodada e horizonte</h3><div className={styles.grid3}><NumberField id="investment" label="Investimento considerado" value={draft.valuation.investmentAmount} min={0} onChange={(value) => updateValuation("investmentAmount", value ?? 0)} suffix="R$" /><NumberField id="ownership" label="Participação desejada" value={draft.valuation.targetOwnership} min={0} max={100} step={0.1} onChange={(value) => updateValuation("targetOwnership", value ?? 0)} suffix="% após o investimento" error={errors["valuation.targetOwnership"]} /><NumberField id="horizon" label="Horizonte de saída" value={draft.valuation.investmentHorizonYears} min={1} max={15} onChange={(value) => updateValuation("investmentHorizonYears", value ?? 5)} suffix="anos" /></div></section>
-        <div className={styles.simpleTranslation}><strong>Tradução das premissas: WACC {draft.valuation.wacc}% · retorno-alvo VC {draft.valuation.vcTargetReturn}% a.a.</strong><p>Crescimento terminal de {draft.valuation.terminalGrowth}% e múltiplo de saída de {draft.valuation.exitMultiple}x permanecem visíveis na revisão. Troque para o modo profissional para editá-los.</p></div>
+        <div className={styles.simpleTranslation}><strong>Tradução das premissas: WACC {draft.valuation.wacc}% · retorno-alvo VC {draft.valuation.vcTargetReturn}% a.a.</strong><p>No modo simples o valor terminal é uma perpetuidade com crescimento de {draft.valuation.terminalGrowth}% e as premissas de valuation são fixas; o múltiplo de saída de {draft.valuation.exitMultiple}x alimenta o VC Method. Troque para o modo profissional para usar múltiplo terminal ou faixas de incerteza.</p></div>
       </>
     ) : (
-      <div className={styles.grid3}><NumberField id="wacc" label="WACC" value={draft.valuation.wacc} min={0.01} max={100} step={0.1} onChange={(value) => updateValuation("wacc", value ?? 0)} suffix="% ao ano" error={errors["valuation.wacc"]} /><NumberField id="terminal-growth" label="Crescimento terminal (g)" value={draft.valuation.terminalGrowth} step={0.1} onChange={(value) => updateValuation("terminalGrowth", value ?? 0)} suffix="% ao ano · deve ser menor que WACC" error={errors["valuation.terminalGrowth"]} /><NumberField id="vc-return" label="Retorno-alvo VC" value={draft.valuation.vcTargetReturn} min={0.1} step={0.1} onChange={(value) => updateValuation("vcTargetReturn", value ?? 0)} suffix="% ao ano" error={errors["valuation.vcTargetReturn"]} /><NumberField id="exit-multiple" label="Múltiplo de saída" value={draft.valuation.exitMultiple} min={0.1} step={0.1} onChange={(value) => updateValuation("exitMultiple", value ?? 0)} suffix="x métrica de saída" error={errors["valuation.exitMultiple"]} /><NumberField id="investment" label="Investimento" value={draft.valuation.investmentAmount} min={0} onChange={(value) => updateValuation("investmentAmount", value ?? 0)} suffix="R$" /><NumberField id="ownership" label="Participação-alvo" value={draft.valuation.targetOwnership} min={0} max={100} step={0.1} onChange={(value) => updateValuation("targetOwnership", value ?? 0)} suffix="% post-money" error={errors["valuation.targetOwnership"]} /><NumberField id="horizon" label="Horizonte de saída" value={draft.valuation.investmentHorizonYears} min={1} max={15} onChange={(value) => updateValuation("investmentHorizonYears", value ?? 5)} suffix="anos" /></div>
+      <>
+      <div className={styles.grid3}><NumberField id="wacc" label="WACC" value={draft.valuation.wacc} min={0.01} max={100} step={0.1} onChange={(value) => updateValuation("wacc", value ?? 0)} suffix="% ao ano" error={errors["valuation.wacc"]} />{draft.valuation.terminalMethod === "gordon" && <NumberField id="terminal-growth" label="Crescimento terminal (g)" value={draft.valuation.terminalGrowth} step={0.1} onChange={(value) => updateValuation("terminalGrowth", value ?? 0)} suffix="% ao ano · deve ser menor que WACC" error={errors["valuation.terminalGrowth"]} />}<NumberField id="vc-return" label="Retorno-alvo VC" value={draft.valuation.vcTargetReturn} min={0.1} step={0.1} onChange={(value) => updateValuation("vcTargetReturn", value ?? 0)} suffix="% ao ano" error={errors["valuation.vcTargetReturn"]} /><NumberField id="exit-multiple" label="Múltiplo de saída (VC Method)" value={draft.valuation.exitMultiple} min={0.1} step={0.1} onChange={(value) => updateValuation("exitMultiple", value ?? 0)} suffix="x receita do Ano 5 · usado no VC Method" error={errors["valuation.exitMultiple"]} /><NumberField id="investment" label="Investimento" value={draft.valuation.investmentAmount} min={0} onChange={(value) => updateValuation("investmentAmount", value ?? 0)} suffix="R$" /><NumberField id="ownership" label="Participação-alvo" value={draft.valuation.targetOwnership} min={0} max={100} step={0.1} onChange={(value) => updateValuation("targetOwnership", value ?? 0)} suffix="% post-money" error={errors["valuation.targetOwnership"]} /><NumberField id="horizon" label="Horizonte de saída" value={draft.valuation.investmentHorizonYears} min={1} max={15} onChange={(value) => updateValuation("investmentHorizonYears", value ?? 5)} suffix="anos" /></div>
+      <section className={styles.professionalBox} aria-labelledby="terminal-heading">
+        <p id="terminal-heading">VALOR TERMINAL E INCERTEZA DAS PREMISSAS DE VALUATION</p>
+        <div className={styles.grid3}>
+          <div className={styles.field}><label htmlFor="terminal-method">Valor terminal do DCF</label><select id="terminal-method" value={draft.valuation.terminalMethod} onChange={(event) => updateValuation("terminalMethod", event.target.value as ValuationAssumptions["terminalMethod"])}><option value="gordon">Perpetuidade (Gordon)</option><option value="exit_multiple">Múltiplo de saída</option></select><small>{draft.valuation.terminalMethod === "gordon" ? "Fluxo normalizado do Ano 5 crescendo a g para sempre." : "Valor de saída no fim do Ano 5 = múltiplo × métrica anual do Ano 5."}</small></div>
+          {draft.valuation.terminalMethod === "exit_multiple" && <>
+            <div className={styles.field}><label htmlFor="terminal-metric">Métrica do múltiplo</label><select id="terminal-metric" value={draft.valuation.terminalMetric} onChange={(event) => updateValuation("terminalMetric", event.target.value as ValuationAssumptions["terminalMetric"])}><option value="revenue">EV / Receita do Ano 5</option><option value="ebitda">EV / EBITDA do Ano 5</option></select><small>EBITDA aproximado por lucro bruto − OPEX; EBITDA negativo não gera valor de saída.</small></div>
+            <NumberField id="terminal-multiple" label="Múltiplo terminal" value={draft.valuation.terminalMultiple} min={0.1} step={0.1} onChange={(value) => updateValuation("terminalMultiple", value ?? 0)} suffix={draft.valuation.terminalMetric === "revenue" ? "x receita do Ano 5" : "x EBITDA do Ano 5"} error={errors["valuation.terminalMultiple"]} />
+          </>}
+        </div>
+        <RangeControl id="wacc" label="o WACC" unit="% a.a." mostLikely={draft.valuation.wacc} range={draft.valuation.ranges.wacc} onChange={(patch) => updateRange("wacc", patch)} error={errors["valuation.ranges.wacc"]} />
+        {draft.valuation.terminalMethod === "gordon"
+          ? <RangeControl id="terminal-growth" label="o crescimento terminal" unit="% a.a." mostLikely={draft.valuation.terminalGrowth} range={draft.valuation.ranges.terminalGrowth} onChange={(patch) => updateRange("terminalGrowth", patch)} error={errors["valuation.ranges.terminalGrowth"]} />
+          : <RangeControl id="terminal-multiple" label="o múltiplo terminal" unit="x" mostLikely={draft.valuation.terminalMultiple} range={draft.valuation.ranges.terminalMultiple} onChange={(patch) => updateRange("terminalMultiple", patch)} error={errors["valuation.ranges.terminalMultiple"]} />}
+        <div className={styles.help}>Com faixa, a premissa é sorteada por cenário (distribuição triangular mínimo / mais provável / máximo) e passa a aparecer entre os drivers do valuation. Sem faixa, ela fica fixa e é testada no tornado de sensibilidade (±3 p.p. de WACC, ±1 p.p. de g, ±25% do múltiplo).</div>
+      </section>
+      </>
     );
 
     if (step === 5) return (
@@ -290,9 +345,11 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
         <div className={styles.reviewGrid}>
           <ReviewCard title="Empresa" onEdit={() => goToStep(0)}><Entry label="Empresa" value={draft.company.name || "—"} /><Entry label="Cenário" value={draft.company.scenarioName || "—"} /><Entry label="Setor / estágio" value={`${draft.company.sector || "—"} · ${draft.company.stage}`} /><Entry label="Modelo" value={draft.company.businessModel} /></ReviewCard>
           <ReviewCard title="Projeção" onEdit={() => goToStep(1)}><Entry label="Periodicidade" value={draft.revenue.cadence === "annual" ? "Anual" : "Mensal"} /><Entry label="Receita Ano 1" value={money.format(draft.revenue.years[0])} /><Entry label="Receita Ano 5" value={money.format(draft.revenue.years[4])} /><Entry label="OPEX anual (constante)" value={money.format(totalAnnualCosts)} /><Entry label="CAPEX anual (constante)" value={money.format(draft.operatingCosts.capex)} /><Entry label="Margem bruta" value={draft.metrics.grossMargin === null ? "—" : `${draft.metrics.grossMargin}%`} /></ReviewCard>
-          <ReviewCard title="Valuation" onEdit={() => goToStep(4)}><Entry label="WACC" value={`${draft.valuation.wacc}% a.a.`} /><Entry label="Crescimento terminal" value={`${draft.valuation.terminalGrowth}% a.a.`} /><Entry label="Retorno-alvo VC" value={`${draft.valuation.vcTargetReturn}% a.a.`} /><Entry label="Múltiplo de saída" value={`${draft.valuation.exitMultiple}x`} /><Entry label="Investimento" value={money.format(draft.valuation.investmentAmount)} /><Entry label="Participação-alvo" value={`${draft.valuation.targetOwnership}%`} /></ReviewCard>
+          <ReviewCard title="Valuation" onEdit={() => goToStep(4)}><Entry label="WACC" value={`${draft.valuation.wacc}% a.a.${draft.mode === "professional" && draft.valuation.ranges.wacc.enabled ? ` (faixa ${draft.valuation.ranges.wacc.minimum}%–${draft.valuation.ranges.wacc.maximum}%)` : ""}`} />{draft.mode === "professional" && draft.valuation.terminalMethod === "exit_multiple"
+            ? <Entry label="Valor terminal" value={`${draft.valuation.terminalMultiple}x ${draft.valuation.terminalMetric === "revenue" ? "receita" : "EBITDA"} do Ano 5${draft.mode === "professional" && draft.valuation.ranges.terminalMultiple.enabled ? ` (faixa ${draft.valuation.ranges.terminalMultiple.minimum}x–${draft.valuation.ranges.terminalMultiple.maximum}x)` : ""}`} />
+            : <Entry label="Crescimento terminal" value={`${draft.valuation.terminalGrowth}% a.a.${draft.mode === "professional" && draft.valuation.ranges.terminalGrowth.enabled ? ` (faixa ${draft.valuation.ranges.terminalGrowth.minimum}%–${draft.valuation.ranges.terminalGrowth.maximum}%)` : ""}`} />}<Entry label="Retorno-alvo VC" value={`${draft.valuation.vcTargetReturn}% a.a.`} /><Entry label="Múltiplo de saída" value={`${draft.valuation.exitMultiple}x`} /><Entry label="Investimento" value={money.format(draft.valuation.investmentAmount)} /><Entry label="Participação-alvo" value={`${draft.valuation.targetOwnership}%`} /></ReviewCard>
           <ReviewCard title="Monte Carlo" onEdit={() => goToStep(5)}><Entry label="Cenários" value={integer.format(draft.monteCarlo.simulationCount)} /><Entry label="Random seed" value={draft.monteCarlo.randomSeed} /><Entry label="Distribuição" value={draft.monteCarlo.distribution} /><Entry label="Falha" value={`${draft.monteCarlo.failureProbability}%`} /><Entry label="Incerteza receita / margem / custo" value={`${draft.monteCarlo.revenueUncertainty}% · ${draft.monteCarlo.marginUncertainty}pp · ${draft.monteCarlo.costUncertainty}%`} /><Entry label="Persistência temporal" value={draft.monteCarlo.serialCorrelation} /></ReviewCard>
-          <ReviewCard title="Rastreabilidade da execução" onEdit={() => goToStep(5)} wide><Entry label="Versão esperada do modelo" value="3.1.0-dev" /><Entry label="Fluxo de persistência" value="Startup → Scenario → Revision → Simulation" /><Entry label="Fonte do resultado" value="SimulationResult persistido pelo backend" /><Entry label="Rascunho" value="Local neste dispositivo até a API persistir o cenário" /></ReviewCard>
+          <ReviewCard title="Rastreabilidade da execução" onEdit={() => goToStep(5)} wide><Entry label="Versão esperada do modelo" value="3.2.0-dev" /><Entry label="Fluxo de persistência" value="Startup → Scenario → Revision → Simulation" /><Entry label="Fonte do resultado" value="SimulationResult persistido pelo backend" /><Entry label="Rascunho" value="Local neste dispositivo até a API persistir o cenário" /></ReviewCard>
         </div>
         {submission.kind === "success" && <div className={`${styles.submitState} ${styles.success}`} role="status"><strong>Simulação persistida pelo backend.</strong>ID {submission.simulationId} · status {submission.status}{submission.resultHash ? ` · hash ${submission.resultHash.slice(0, 12)}` : ""}. Nenhum resultado foi fabricado no frontend.<div className={styles.submitActions}><Link className="button button-secondary" href={`/app/simulations/${submission.simulationId}`}>Abrir resultado</Link></div></div>}
         {submission.kind === "error" && <div className={`${styles.submitState} ${styles.errorState}`} role="alert"><strong>A execução não foi iniciada.</strong>{submission.message}</div>}

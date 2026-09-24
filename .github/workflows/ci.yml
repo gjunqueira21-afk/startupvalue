@@ -21,6 +21,7 @@ jobs:
       - run: npm ci
       - run: npm audit --audit-level=high
       - run: npm --workspace apps/frontend run lint
+      - run: npm --workspace apps/frontend run test
       - run: npm --workspace apps/frontend run build
 
   backend:

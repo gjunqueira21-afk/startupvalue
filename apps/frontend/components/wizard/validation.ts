@@ -51,9 +51,34 @@ export function validateStep(draft: ValuationWizardDraft, step: WizardStep): Val
   }
 
   if (step === 4) {
-    if (draft.valuation.wacc <= 0 || draft.valuation.wacc > 100) errors["valuation.wacc"] = "Use WACC entre 0% e 100%.";
-    if (draft.valuation.terminalGrowth >= draft.valuation.wacc) {
+    const valuation = draft.valuation;
+    const professional = draft.mode === "professional";
+    const gordon = !professional || valuation.terminalMethod === "gordon";
+    if (valuation.wacc <= 0 || valuation.wacc > 100) errors["valuation.wacc"] = "Use WACC entre 0% e 100%.";
+    if (gordon && valuation.terminalGrowth >= valuation.wacc) {
       errors["valuation.terminalGrowth"] = "O crescimento terminal deve ser menor que o WACC.";
+    }
+    if (professional) {
+      const { wacc, terminalGrowth, terminalMultiple } = valuation.ranges;
+      const outside = (range: typeof wacc, value: number) => !(range.minimum <= value && value <= range.maximum && range.minimum < range.maximum);
+      const growthRange = gordon && terminalGrowth.enabled;
+      if (growthRange && outside(terminalGrowth, valuation.terminalGrowth)) {
+        errors["valuation.ranges.terminalGrowth"] = "Use mínimo ≤ crescimento provável ≤ máximo.";
+      }
+      if (wacc.enabled) {
+        const highestGrowth = growthRange ? terminalGrowth.maximum : valuation.terminalGrowth;
+        if (outside(wacc, valuation.wacc) || wacc.minimum <= 0) {
+          errors["valuation.ranges.wacc"] = "Use 0% < mínimo ≤ WACC provável ≤ máximo.";
+        } else if (gordon && wacc.minimum <= highestGrowth) {
+          errors["valuation.ranges.wacc"] = "O menor WACC da faixa precisa ficar acima do maior crescimento terminal.";
+        }
+      }
+      if (!gordon) {
+        if (valuation.terminalMultiple <= 0) errors["valuation.terminalMultiple"] = "O múltiplo terminal deve ser maior que zero.";
+        if (terminalMultiple.enabled && (outside(terminalMultiple, valuation.terminalMultiple) || terminalMultiple.minimum < 0)) {
+          errors["valuation.ranges.terminalMultiple"] = "Use 0 ≤ mínimo ≤ múltiplo provável ≤ máximo.";
+        }
+      }
     }
     if (draft.valuation.exitMultiple <= 0) errors["valuation.exitMultiple"] = "O múltiplo deve ser maior que zero.";
     if (draft.valuation.vcTargetReturn <= 0) errors["valuation.vcTargetReturn"] = "O retorno-alvo deve ser maior que zero.";

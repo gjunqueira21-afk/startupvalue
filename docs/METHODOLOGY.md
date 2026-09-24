@@ -174,3 +174,29 @@ Para cenário *i* no mês *t*, o fluxo simplificado é `FCFF_i,t = receita_base_
 O DCF usa desconto mensal efetivo derivado do WACC anual. Quando há crescimento terminal, o fluxo mensal normalizado no horizonte é a **média dos últimos 12 FCFF mensais realizados**, limitada a zero apenas para elegibilidade ao valor terminal; os fluxos explícitos negativos são preservados. O valor terminal é calculado no fim do mês 60 e descontado pelo fator acumulado desse mês. Esta convenção substitui o uso do último mês isolado também para novas execuções do caminho legado `monthly_fcff`; por isso a versão do modelo é incrementada. Resultados anteriores persistidos não são recalculados.
 
 Para análise de drivers estruturados (snapshot a partir do schema 1.2.0), o snapshot privado guarda valuation assinado; os drivers primitivos `revenue_factor_mean`, `cost_factor_mean`, `gross_margin_mean` (margem bruta média simulada nos 60 meses) e `failure_state`; e as métricas de resultado `revenue_year5_operating`, `opex_year5_operating`, `ebitda_margin_year5_operating` = (receita×margem bruta − OPEX)/receita no Ano 5 (aproximação sem D&A explícita) e `revenue_cagr_operating` = (receita Ano 5/receita Ano 1)^(1/4) − 1. As métricas de resultado são medidas na **trajetória operacional**, antes de um eventual encerramento: receita e OPEX *realizados* ficam zero após o encerramento, e usá-los faria OPEX alto parecer associado a valuation alto apenas porque indica sobrevivência. O encerramento aparece separadamente em `failure_state`. As razões só são publicadas quando definidas em todos os cenários (receita positiva); caso contrário a variável é omitida, sem valor substituto. Snapshots anteriores (`revenue_year5`, `opex_year5` realizados e `modeled_gross_margin_year5`) continuam legíveis e são rotulados como realizados. Spearman e a comparação hit/miss descrevem associação dentro dos cenários, não efeitos causais. FCFF total e FCFF dos últimos 12 meses foram excluídos da lista de drivers porque repetiriam quase diretamente o cálculo do DCF. No caminho legado, apenas fator de FCFF e estado de encerramento são drivers disponíveis.
+
+## 15. Premissas de valuation como opções do usuário (3.2.0-dev)
+
+**Valor terminal.** `terminal_method` escolhe entre:
+
+- `gordon` (padrão): perpetuidade sobre o FCFF normalizado (média dos últimos 12 meses realizados, piso zero), com `terminal_growth` < WACC;
+- `exit_multiple`: valor de saída no mês 60 = `exit_multiple × métrica anual do Ano 5`, onde `exit_metric` é `revenue` (EV/Receita) ou `ebitda` (EV/EBITDA, aproximado por lucro bruto − OPEX, sem D&A explícita). Métrica negativa não gera valor de saída (piso zero, mesma regra de elegibilidade da perpetuidade); cenários encerrados não têm valor terminal. Disponível apenas no modelo estruturado, porque o modelo FCFF não tem receita nem EBITDA. Os dois métodos são mutuamente exclusivos.
+
+O múltiplo é aplicado ao valor da firma (EV); caixa e dívida entram depois, na ponte para equity. É uma premissa do usuário, não um benchmark de mercado fornecido pelo produto.
+
+**Fixo ou com faixa.** WACC, `terminal_growth` e `exit_multiple` são fixos por padrão. Com `wacc_uncertainty`, `terminal_growth_uncertainty` ou `exit_multiple_uncertainty`, o parâmetro é sorteado **uma vez por cenário** (constante ao longo do horizonte) e passa a ser um driver primitivo no ranking do §10. Uma distribuição `constant` equivale a valor fixo e não vira driver.
+
+Restrições verificadas no contrato, antes de qualquer sorteio:
+
+- o suporte do WACC precisa ser limitado inferiormente, e o do crescimento, superiormente. Por isso triangular, uniforme ou normal/t truncadas são aceitas, e normal sem limites é recusada;
+- o menor WACC possível precisa ficar acima do maior crescimento possível, o que garante WACC > g em todos os cenários;
+- o valor-base informado precisa estar dentro da própria faixa;
+- o múltiplo tem suporte não negativo.
+
+**Fluxos aleatórios.** O motor operacional continua usando `PCG64(seed)` para fatores e encerramento. Cada parâmetro com faixa usa um fluxo próprio, `PCG64(SeedSequence([seed, k]))`, com k = 1 para WACC, 2 para g e 3 para o múltiplo. Assim, ativar uma faixa não altera os sorteios operacionais nem os de outro parâmetro, e resultados com parâmetros fixos permanecem idênticos bit a bit aos da versão anterior.
+
+**Tornado (`tornado-v1`).** É uma análise determinística *ceteris paribus*, persistida em `summary.sensitivity` e separada dos drivers estatísticos. Para cada parâmetro de valuation e para a probabilidade de encerramento, reavalia-se o **P50 do equity** com o parâmetro fixado em um nível baixo e em um alto, mantendo todas as demais premissas e os **mesmos números aleatórios** (common random numbers). Para WACC, g e múltiplo, isso significa reavaliar exatamente os mesmos fluxos. Para a probabilidade de encerramento, a mesma seed reproduz as trajetórias de fatores e só o sorteio de encerramento muda.
+
+- Níveis: com faixa, P10 e P90 exatos da distribuição informada (`distribution_p10_p90`); sem faixa, base ± delta (`base_plus_minus_delta`). Os deltas padrão (configuráveis em `tornado`) são ±3 p.p. de WACC, ±1 p.p. de g, ±25% do múltiplo e ±10 p.p. de probabilidade de encerramento.
+- Níveis que violariam o modelo são ajustados e marcados com `clamped=true`: WACC fica pelo menos 0,5 p.p. acima do maior g, g fica pelo menos 0,5 p.p. abaixo do menor WACC, e as probabilidades ficam em [0, 1].
+- Barras ordenadas pelo *swing* |P50(alto) − P50(baixo)|. O tornado não atribui probabilidade aos níveis nem captura interações entre parâmetros.

@@ -1,4 +1,4 @@
-import type { ValuationWizardDraft } from "@/components/wizard/types";
+import type { RangeInput, TerminalMetric, ValuationWizardDraft } from "@/components/wizard/types";
 import { apiRequest } from "./client";
 
 export interface CreateSimulationResponse {
@@ -196,7 +196,87 @@ function profilePayload(draft: ValuationWizardDraft) {
   };
 }
 
-function canonicalInputs(draft: ValuationWizardDraft) {
+interface TriangularPayload {
+  kind: "triangular";
+  minimum: number;
+  mode: number;
+  maximum: number;
+}
+
+/** Mirror of the backend CanonicalValuationInputs contract (structured model). */
+export interface CanonicalInputsPayload {
+  monthly_revenue: number[];
+  monthly_opex: number[];
+  monthly_capex: number[];
+  gross_margin: number;
+  revenue_uncertainty: DistributionPayload;
+  cost_uncertainty: DistributionPayload;
+  margin_uncertainty_pp: number;
+  serial_correlation: number;
+  persistent_weight: number;
+  annual_wacc: number;
+  wacc_uncertainty?: TriangularPayload;
+  terminal_growth?: number;
+  terminal_growth_uncertainty?: TriangularPayload;
+  terminal_method?: "exit_multiple";
+  exit_metric?: TerminalMetric;
+  exit_multiple?: number;
+  exit_multiple_uncertainty?: TriangularPayload;
+  excess_cash: number;
+  debt: number;
+  failure_probability_horizon: number;
+  liquidation_value: number;
+}
+
+function triangularRange(range: RangeInput, mostLikely: number, scale: number): TriangularPayload {
+  return {
+    kind: "triangular",
+    minimum: range.minimum / scale,
+    mode: mostLikely / scale,
+    maximum: range.maximum / scale,
+  };
+}
+
+/** Terminal value and valuation-parameter ranges; simple mode keeps a fixed perpetuity. */
+function valuationOptions(
+  draft: ValuationWizardDraft,
+): Pick<
+  CanonicalInputsPayload,
+  | "wacc_uncertainty"
+  | "terminal_growth"
+  | "terminal_growth_uncertainty"
+  | "terminal_method"
+  | "exit_metric"
+  | "exit_multiple"
+  | "exit_multiple_uncertainty"
+> {
+  const { valuation } = draft;
+  const professional = draft.mode === "professional";
+  const ranges = valuation.ranges;
+  const wacc = professional && ranges.wacc.enabled
+    ? { wacc_uncertainty: triangularRange(ranges.wacc, valuation.wacc, 100) }
+    : {};
+  if (professional && valuation.terminalMethod === "exit_multiple") {
+    return {
+      ...wacc,
+      terminal_method: "exit_multiple",
+      exit_metric: valuation.terminalMetric,
+      exit_multiple: valuation.terminalMultiple,
+      ...(ranges.terminalMultiple.enabled
+        ? { exit_multiple_uncertainty: triangularRange(ranges.terminalMultiple, valuation.terminalMultiple, 1) }
+        : {}),
+    };
+  }
+  return {
+    ...wacc,
+    terminal_growth: valuation.terminalGrowth / 100,
+    ...(professional && ranges.terminalGrowth.enabled
+      ? { terminal_growth_uncertainty: triangularRange(ranges.terminalGrowth, valuation.terminalGrowth, 100) }
+      : {}),
+  };
+}
+
+export function buildCanonicalInputs(draft: ValuationWizardDraft): CanonicalInputsPayload {
   if (draft.metrics.grossMargin === null) {
     throw new Error("Informe a margem bruta usada no DCF.");
   }
@@ -213,7 +293,7 @@ function canonicalInputs(draft: ValuationWizardDraft) {
     serial_correlation: draft.monteCarlo.serialCorrelation,
     persistent_weight: 0.6,
     annual_wacc: draft.valuation.wacc / 100,
-    terminal_growth: draft.valuation.terminalGrowth / 100,
+    ...valuationOptions(draft),
     excess_cash: draft.metrics.cash,
     debt: draft.metrics.debt,
     failure_probability_horizon: draft.monteCarlo.failureProbability / 100,
@@ -246,7 +326,7 @@ export async function createSimulation(
     `/api/v1/scenarios/${scenario.id}/revisions`,
     {
       method: "POST",
-      body: JSON.stringify({ inputs: canonicalInputs(draft) }),
+      body: JSON.stringify({ inputs: buildCanonicalInputs(draft) }),
       signal,
     },
   );

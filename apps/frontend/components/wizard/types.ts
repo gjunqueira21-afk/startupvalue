@@ -60,9 +60,29 @@ export interface StartupMetrics {
   debt: number;
 }
 
+export type TerminalMethod = "gordon" | "exit_multiple";
+export type TerminalMetric = "revenue" | "ebitda";
+
+/** Optional uncertainty range; the fixed field is its most likely value. */
+export interface RangeInput {
+  enabled: boolean;
+  minimum: number;
+  maximum: number;
+}
+
+export interface ValuationRanges {
+  wacc: RangeInput;
+  terminalGrowth: RangeInput;
+  terminalMultiple: RangeInput;
+}
+
 export interface ValuationAssumptions {
   wacc: number;
   terminalGrowth: number;
+  terminalMethod: TerminalMethod;
+  terminalMetric: TerminalMetric;
+  terminalMultiple: number;
+  ranges: ValuationRanges;
   vcTargetReturn: number;
   exitMultiple: number;
   targetOwnership: number;

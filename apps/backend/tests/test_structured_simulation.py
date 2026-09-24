@@ -172,7 +172,7 @@ def test_service_uses_normalized_terminal_and_persists_economic_drivers() -> Non
     assert factors["ebitda_margin_year5_operating"][0] == pytest.approx((650.0 - 240.0) / 1300.0)
     assert factors["revenue_cagr_operating"][0] == pytest.approx((1300.0 / 1200.0) ** 0.25 - 1)
     assert result.summary["vc_method"]["status"] == "unavailable"
-    assert result.schema_version == "1.2.0"
+    assert result.schema_version == "1.3.0"
     engine.dispose()
 
 

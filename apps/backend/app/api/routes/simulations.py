@@ -17,6 +17,9 @@ from app.api.schemas import (
     SimulationSummary,
     TargetComparisonResponse,
     TargetResponse,
+    TornadoItemResponse,
+    TornadoResponse,
+    TornadoSummary,
 )
 from app.db.models import Role, Simulation, SimulationResult, SimulationSamples
 from app.decision.catalog import describe
@@ -171,6 +174,10 @@ def read_decision(simulation_id: str, db: Database, actor: Actor) -> DecisionRes
         if isinstance(persisted, dict)
         else driver_ranking_payload(rank_snapshot_drivers(factors, valuations))
     )
+    stored_tornado = result.summary.get("sensitivity")
+    tornado = (
+        TornadoSummary.model_validate(stored_tornado) if isinstance(stored_tornado, dict) else None
+    )
     return DecisionResponse(
         simulation_id=simulation.id,
         result_hash=result.result_hash,
@@ -188,6 +195,19 @@ def read_decision(simulation_id: str, db: Database, actor: Actor) -> DecisionRes
             )
             for item in ranking.items
         ],
+        tornado=TornadoResponse(
+            **tornado.model_dump(exclude={"items"}),
+            items=[
+                TornadoItemResponse(
+                    **item.model_dump(),
+                    label=describe(item.parameter).label,
+                    unit=describe(item.parameter).unit,
+                )
+                for item in tornado.items
+            ],
+        )
+        if tornado is not None
+        else None,
     )
 
 

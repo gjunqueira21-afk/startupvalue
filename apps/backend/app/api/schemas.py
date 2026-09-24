@@ -123,6 +123,33 @@ class DistributionInput(ApiModel):
         return self
 
 
+def distribution_support(value: DistributionInput) -> tuple[float, float]:
+    """Closed support bounds used to prove rate constraints hold in every scenario."""
+    if value.kind == "constant":
+        assert value.value is not None
+        return value.value, value.value
+    if value.kind in {"triangular", "uniform"}:
+        assert value.minimum is not None and value.maximum is not None
+        return value.minimum, value.maximum
+    if value.kind in {"normal", "student_t"}:
+        return (
+            value.lower if value.lower is not None else float("-inf"),
+            value.upper if value.upper is not None else float("inf"),
+        )
+    return 0.0, float("inf")
+
+
+class TornadoSettings(ApiModel):
+    """Swing applied to fixed assumptions in the one-at-a-time sensitivity."""
+
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    wacc_delta: float = Field(default=0.03, gt=0, le=0.5)
+    terminal_growth_delta: float = Field(default=0.01, gt=0, le=0.2)
+    exit_multiple_relative_delta: float = Field(default=0.25, gt=0, lt=1)
+    failure_probability_delta: float = Field(default=0.10, gt=0, le=1)
+
+
 class CanonicalValuationInputs(ApiModel):
     model_config = ConfigDict(allow_inf_nan=False)
 
@@ -143,6 +170,13 @@ class CanonicalValuationInputs(ApiModel):
     uncertainty: DistributionInput | None = None
     failure_probability_horizon: float = Field(default=0.0, ge=0, le=1)
     liquidation_value: float = 0.0
+    wacc_uncertainty: DistributionInput | None = None
+    terminal_growth_uncertainty: DistributionInput | None = None
+    terminal_method: Literal["gordon", "exit_multiple"] = "gordon"
+    exit_multiple: float | None = Field(default=None, gt=0, le=200)
+    exit_metric: Literal["revenue", "ebitda"] | None = None
+    exit_multiple_uncertainty: DistributionInput | None = None
+    tornado: TornadoSettings = Field(default_factory=TornadoSettings)
 
     @field_validator("monthly_revenue", "monthly_opex", "monthly_capex")
     @classmethod
@@ -190,7 +224,49 @@ class CanonicalValuationInputs(ApiModel):
             assert self.cost_uncertainty is not None
             self._validate_nonnegative_factor(self.revenue_uncertainty, "revenue_uncertainty")
             self._validate_nonnegative_factor(self.cost_uncertainty, "cost_uncertainty")
+        self._validate_terminal_method()
+        self._validate_rate_supports()
         return self
+
+    def _validate_terminal_method(self) -> None:
+        exit_fields = (self.exit_multiple, self.exit_metric, self.exit_multiple_uncertainty)
+        if self.terminal_method == "gordon":
+            if any(value is not None for value in exit_fields):
+                raise ValueError("exit multiple fields require terminal_method='exit_multiple'")
+            return
+        if self.monthly_fcff is not None:
+            raise ValueError("exit multiple terminal value requires structured projections")
+        if self.exit_multiple is None or self.exit_metric is None:
+            raise ValueError("exit multiple terminal value requires exit_multiple and exit_metric")
+        if self.terminal_growth is not None or self.terminal_growth_uncertainty is not None:
+            raise ValueError("choose either a perpetuity growth or an exit multiple")
+        if self.exit_multiple_uncertainty is not None:
+            low, high = distribution_support(self.exit_multiple_uncertainty)
+            if low < 0:
+                raise ValueError("exit_multiple_uncertainty must have a non-negative support")
+            if not low <= self.exit_multiple <= high:
+                raise ValueError("exit_multiple must lie inside exit_multiple_uncertainty")
+
+    def _validate_rate_supports(self) -> None:
+        if self.terminal_growth_uncertainty is not None and self.terminal_growth is None:
+            raise ValueError("terminal_growth_uncertainty requires a terminal_growth base")
+        growth_high = self.terminal_growth
+        if self.terminal_growth_uncertainty is not None:
+            assert self.terminal_growth is not None
+            growth_low, growth_high = distribution_support(self.terminal_growth_uncertainty)
+            if growth_low <= -1 or growth_high == float("inf"):
+                raise ValueError("terminal_growth_uncertainty needs a bounded support above -100%")
+            if not growth_low <= self.terminal_growth <= growth_high:
+                raise ValueError("terminal_growth must lie inside terminal_growth_uncertainty")
+        wacc_low = self.annual_wacc
+        if self.wacc_uncertainty is not None:
+            wacc_low, wacc_high = distribution_support(self.wacc_uncertainty)
+            if wacc_low <= -1:
+                raise ValueError("wacc_uncertainty needs a support above -100%")
+            if not wacc_low <= self.annual_wacc <= wacc_high:
+                raise ValueError("annual_wacc must lie inside wacc_uncertainty")
+        if growth_high is not None and growth_high >= wacc_low:
+            raise ValueError("terminal growth must stay below WACC in every scenario")
 
 
 class RevisionCreate(ApiModel):
@@ -257,6 +333,26 @@ class DriverRankingSummary(ApiModel):
     items: list[RankedDriverSummary]
 
 
+class TornadoItemSummary(ApiModel):
+    parameter: Literal["annual_wacc", "terminal_growth", "exit_multiple", "failure_probability"]
+    base_level: float
+    low_level: float
+    high_level: float
+    value_at_low: float
+    value_at_high: float
+    swing: float = Field(ge=0)
+    level_source: Literal["base_plus_minus_delta", "distribution_p10_p90"]
+    clamped: bool
+
+
+class TornadoSummary(ApiModel):
+    method: Literal["one_at_a_time_common_random_numbers"]
+    method_version: str
+    statistic: Literal["p50"]
+    base_value: float
+    items: list[TornadoItemSummary]
+
+
 class SimulationSummary(ApiModel):
     basis: str
     percentiles: dict[Literal["p5", "p10", "p25", "p50", "p75", "p90", "p95"], float]
@@ -269,6 +365,7 @@ class SimulationSummary(ApiModel):
     uncertainty_ratio: float | None
     uncertainty: UncertaintyResponse | None = None
     drivers: DriverRankingSummary | None = None
+    sensitivity: TornadoSummary | None = None
     breakeven_probabilities: dict[str, float] = Field(default_factory=dict)
     breakeven_month_percentiles: dict[str, float] = Field(default_factory=dict)
     non_positive_probability: float
@@ -285,6 +382,19 @@ class DriverResponse(RankedDriverSummary):
     count: int
 
 
+class TornadoItemResponse(TornadoItemSummary):
+    label: str
+    unit: VariableUnit | None
+
+
+class TornadoResponse(ApiModel):
+    method: Literal["one_at_a_time_common_random_numbers"]
+    method_version: str
+    statistic: Literal["p50"]
+    base_value: float
+    items: list[TornadoItemResponse]
+
+
 class DecisionResponse(ApiModel):
     simulation_id: str
     result_hash: str
@@ -296,6 +406,7 @@ class DecisionResponse(ApiModel):
     r_squared: float | None
     warnings: list[str]
     drivers: list[DriverResponse]
+    tornado: TornadoResponse | None = None
 
 
 class ConditionalStatisticsResponse(ApiModel):

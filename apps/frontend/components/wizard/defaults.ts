@@ -39,6 +39,14 @@ export const DEFAULT_DRAFT: ValuationWizardDraft = {
   valuation: {
     wacc: 25,
     terminalGrowth: 4,
+    terminalMethod: "gordon",
+    terminalMetric: "revenue",
+    terminalMultiple: 6,
+    ranges: {
+      wacc: { enabled: false, minimum: 20, maximum: 32 },
+      terminalGrowth: { enabled: false, minimum: 2, maximum: 6 },
+      terminalMultiple: { enabled: false, minimum: 4, maximum: 9 },
+    },
     vcTargetReturn: 40,
     exitMultiple: 6,
     targetOwnership: 20,
@@ -68,6 +76,23 @@ export const UNCERTAINTY_PRESETS = {
   medium: { revenueUncertainty: 25, marginUncertainty: 15, costUncertainty: 15 },
   high: { revenueUncertainty: 40, marginUncertainty: 25, costUncertainty: 25 },
 } as const;
+
+/** Restore a locally saved draft, filling fields added after it was saved. */
+export function hydrateDraft(stored: unknown): ValuationWizardDraft | null {
+  if (!stored || typeof stored !== "object") return null;
+  const parsed = stored as Partial<ValuationWizardDraft>;
+  if (parsed.schemaVersion !== 1) return null;
+  const valuation: Partial<ValuationWizardDraft["valuation"]> = parsed.valuation ?? {};
+  return {
+    ...structuredClone(DEFAULT_DRAFT),
+    ...parsed,
+    valuation: {
+      ...DEFAULT_DRAFT.valuation,
+      ...valuation,
+      ranges: { ...structuredClone(DEFAULT_DRAFT.valuation.ranges), ...valuation.ranges },
+    },
+  } as ValuationWizardDraft;
+}
 
 export function freshDraft(): ValuationWizardDraft {
   return structuredClone({ ...DEFAULT_DRAFT, updatedAt: new Date().toISOString() });

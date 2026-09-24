@@ -103,7 +103,9 @@ def test_decision_reads_persisted_vectors_and_is_workspace_scoped(
     def fail_if_resampled(*args: object, **kwargs: object) -> None:
         raise AssertionError("decision request resampled Monte Carlo")
 
-    monkeypatch.setattr("app.services.simulation.simulate_simple_cash_flows", fail_if_resampled)
+    monkeypatch.setattr(
+        "app.services.valuation_model.simulate_simple_cash_flows", fail_if_resampled
+    )
     decision_response = owner.get(f"/api/v1/simulations/{simulation_id}/decision")
     assert decision_response.status_code == 200, decision_response.text
     decision = decision_response.json()
@@ -124,6 +126,12 @@ def test_decision_reads_persisted_vectors_and_is_workspace_scoped(
     ]
     uncertainty = summary["uncertainty"]
     assert uncertainty["rule_version"] == "uncertainty-v1"
+    tornado = {item["parameter"]: item for item in decision["tornado"]["items"]}
+    assert decision["tornado"]["method_version"] == "tornado-v1"
+    assert tornado["annual_wacc"]["label"] == "WACC"
+    assert tornado["annual_wacc"]["unit"] == "ratio"
+    assert tornado["failure_probability"]["label"] == "Probabilidade de encerramento"
+    assert tornado["annual_wacc"]["value_at_low"] > tornado["annual_wacc"]["value_at_high"]
     assert summary["uncertainty_label"] == uncertainty["label"]
 
     p50 = summary["percentiles"]["p50"]

@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_env: str = "development"
-    model_version: str = "3.1.0-dev"
+    model_version: str = "3.2.0-dev"
     tax_version: str = "br-simplified-2026.09-draft"
     database_url: str | None = None
     redis_url: str | None = None

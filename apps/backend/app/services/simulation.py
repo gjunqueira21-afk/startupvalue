@@ -5,14 +5,13 @@ import json
 import uuid
 import zlib
 from collections.abc import Mapping
-from math import inf
 from typing import Any
 
 import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import CanonicalValuationInputs, DistributionInput, SimulationRunRequest
+from app.api.schemas import CanonicalValuationInputs, SimulationRunRequest
 from app.core.config import get_settings
 from app.db.models import (
     Scenario,
@@ -26,54 +25,16 @@ from app.db.models import (
 from app.decision.catalog import split_by_role
 from app.decision.sensitivity import DriverRanking, rank_drivers
 from app.decision.uncertainty import assess_uncertainty
+from app.services.valuation_model import (
+    build_tornado,
+    sample_parameters,
+    simulate_paths,
+)
+from app.services.valuation_model import equity_values as model_equity_values
 from app.services.vc_analysis import analyze_vc_profile
-from app.simulation.distributions import (
-    Constant,
-    DistributionSpec,
-    LogNormal,
-    Normal,
-    StudentT,
-    Triangular,
-    Uniform,
-)
-from app.simulation.monte_carlo import (
-    SimpleCashFlowSimulationInput,
-    StructuredCashFlowSimulationInput,
-    simulate_simple_cash_flows,
-    simulate_structured_cash_flows,
-)
 from app.simulation.statistics import DistributionSummary, summarize
-from app.valuation.dcf import TerminalAssumptions, accumulated_discount_factors, terminal_value
 
-RESULT_SCHEMA_VERSION = "1.2.0"
-
-
-def distribution_spec(value: DistributionInput) -> DistributionSpec:
-    lower = value.lower if value.lower is not None else -inf
-    upper = value.upper if value.upper is not None else inf
-    if value.kind == "constant":
-        assert value.value is not None
-        return Constant(value.value)
-    if value.kind == "normal":
-        assert value.standard_deviation is not None
-        return Normal(value.mean, value.standard_deviation, lower, upper)
-    if value.kind == "student_t":
-        assert value.standard_deviation is not None and value.degrees_of_freedom is not None
-        return StudentT.from_standard_deviation(
-            loc=value.mean,
-            standard_deviation=value.standard_deviation,
-            df=value.degrees_of_freedom,
-            lower=lower,
-            upper=upper,
-        )
-    if value.kind == "triangular":
-        assert value.minimum is not None and value.mode is not None and value.maximum is not None
-        return Triangular(value.minimum, value.mode, value.maximum)
-    if value.kind == "uniform":
-        assert value.minimum is not None and value.maximum is not None
-        return Uniform(value.minimum, value.maximum)
-    assert value.coefficient_of_variation is not None
-    return LogNormal(value.mean, value.coefficient_of_variation)
+RESULT_SCHEMA_VERSION = "1.3.0"
 
 
 def _summary_payload(
@@ -172,23 +133,6 @@ def rank_snapshot_drivers(
 ) -> DriverRanking:
     drivers, _ = split_by_role(factors)
     return rank_drivers(drivers, valuations)
-
-
-def _operating_outcomes(
-    revenue: np.ndarray, opex: np.ndarray, margins: np.ndarray
-) -> dict[str, np.ndarray]:
-    """Year-5 business metrics on the operating path, before any absorbing failure."""
-    revenue_y1 = np.sum(revenue[:, :12], axis=1)
-    revenue_y5 = np.sum(revenue[:, -12:], axis=1)
-    opex_y5 = np.sum(opex[:, -12:], axis=1)
-    outcomes = {"revenue_year5_operating": revenue_y5, "opex_year5_operating": opex_y5}
-    # Ratios are only published when defined for every scenario; no substitute values.
-    if np.all(revenue_y5 > 0.0):
-        gross_profit_y5 = np.sum(revenue[:, -12:] * margins[:, -12:], axis=1)
-        outcomes["ebitda_margin_year5_operating"] = (gross_profit_y5 - opex_y5) / revenue_y5
-        if np.all(revenue_y1 > 0.0):
-            outcomes["revenue_cagr_operating"] = (revenue_y5 / revenue_y1) ** 0.25 - 1.0
-    return outcomes
 
 
 def _snapshot_payload(
@@ -318,87 +262,32 @@ def execute_synchronously(
     db.flush()
 
     inputs = CanonicalValuationInputs.model_validate(canonical_inputs)
-    if inputs.monthly_fcff is not None:
-        assert inputs.uncertainty is not None
-        simulated_legacy = simulate_simple_cash_flows(
-            SimpleCashFlowSimulationInput(
-                base_cash_flows=tuple(inputs.monthly_fcff),
-                factor=distribution_spec(inputs.uncertainty),
-                scenarios=request.simulation_count,
-                seed=request.seed,
-                p_failure_horizon=inputs.failure_probability_horizon,
-                liquidation_value=inputs.liquidation_value,
-            )
-        )
-        realized_cash_flows = simulated_legacy.realized_cash_flows
-        failure_months = simulated_legacy.failure_months
-        realized_inputs = {
-            "scenario_factor_mean": np.mean(simulated_legacy.factor_paths, axis=1),
-            "failure_state": (failure_months > 0).astype(np.float64),
-        }
-    else:
-        assert inputs.monthly_revenue is not None
-        assert inputs.monthly_opex is not None
-        assert inputs.monthly_capex is not None
-        assert inputs.gross_margin is not None
-        assert inputs.revenue_uncertainty is not None
-        assert inputs.cost_uncertainty is not None
-        simulated_structured = simulate_structured_cash_flows(
-            StructuredCashFlowSimulationInput(
-                base_monthly_revenue=tuple(inputs.monthly_revenue),
-                base_monthly_opex=tuple(inputs.monthly_opex),
-                base_monthly_capex=tuple(inputs.monthly_capex),
-                gross_margin=inputs.gross_margin,
-                revenue_factor=distribution_spec(inputs.revenue_uncertainty),
-                cost_factor=distribution_spec(inputs.cost_uncertainty),
-                margin_uncertainty_pp=inputs.margin_uncertainty_pp,
-                serial_correlation=inputs.serial_correlation,
-                persistent_weight=inputs.persistent_weight,
-                scenarios=request.simulation_count,
-                seed=request.seed,
-                p_failure_horizon=inputs.failure_probability_horizon,
-                liquidation_value=inputs.liquidation_value,
-            )
-        )
-        realized_cash_flows = simulated_structured.realized_cash_flows
-        failure_months = simulated_structured.failure_months
-        paths = simulated_structured.factor_paths
-        realized_inputs = {
-            "revenue_factor_mean": np.mean(paths[:, :, 0], axis=1),
-            "cost_factor_mean": np.mean(paths[:, :, 1], axis=1),
-            "gross_margin_mean": np.mean(paths[:, :, 2], axis=1),
-            "failure_state": (failure_months > 0).astype(np.float64),
-            **_operating_outcomes(
-                simulated_structured.counterfactual_revenue,
-                simulated_structured.counterfactual_opex,
-                paths[:, :, 2],
-            ),
-        }
-    discount_factors = accumulated_discount_factors(
-        inputs.annual_wacc, realized_cash_flows.shape[1]
+    paths = simulate_paths(
+        inputs,
+        seed=request.seed,
+        scenarios=request.simulation_count,
+        p_failure=inputs.failure_probability_horizon,
     )
-    enterprise_values = np.asarray(
-        np.sum(
-            realized_cash_flows / discount_factors[None, :],
-            axis=1,
-            dtype=np.float64,
-        ),
-        dtype=np.float64,
+    parameters = sample_parameters(
+        inputs, seed=request.seed, scenarios=request.simulation_count
     )
-    if inputs.terminal_growth is not None:
-        unit_terminal = terminal_value(
-            TerminalAssumptions(1.0, inputs.terminal_growth, inputs.annual_wacc)
-        )
-        eligible = failure_months == 0
-        terminal_fcff = np.maximum(np.mean(realized_cash_flows[:, -12:], axis=1), 0.0)
-        enterprise_values += eligible * terminal_fcff * unit_terminal / discount_factors[-1]
-    equity_values = enterprise_values + inputs.excess_cash - inputs.debt
+    equity_values = model_equity_values(inputs, paths, parameters)
+    failure_months = paths.failure_months
+    realized_inputs = {**paths.realized_inputs, **parameters.drivers()}
     distribution = summarize(equity_values)
     observed_failure = float(np.mean(failure_months > 0))
     summary = _summary_payload(distribution, observed_failure, equity_values)
     summary = with_uncertainty(summary)
     summary["drivers"] = driver_ranking_payload(
         rank_snapshot_drivers(realized_inputs, equity_values)
+    )
+    summary["sensitivity"] = build_tornado(
+        inputs,
+        seed=request.seed,
+        scenarios=request.simulation_count,
+        paths=paths,
+        parameters=parameters,
+        base_value=distribution.p50,
     )
     summary["vc_method"] = _vc_profile_summary(
         db, workspace_id=workspace_id, revision_id=revision_id
