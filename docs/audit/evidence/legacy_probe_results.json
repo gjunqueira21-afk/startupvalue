@@ -1,0 +1,54 @@
+{
+  "scope": "Executed unmodified legacy functions in isolated Node VM; independent arithmetic comparisons. Does not validate proposed application.",
+  "simples": {
+    "annualRevenue": 120000,
+    "legacyMonthlyTax": 50,
+    "expectedMonthlyTaxUnderLegacyAnnualTable": 600,
+    "understatementFactor": 12
+  },
+  "vc": {
+    "monthlyEbitda": 100000,
+    "multiple": 8,
+    "targetReturn": 0.3,
+    "years": 5,
+    "legacy": 294884.12896757375,
+    "proposedPVExitEquityAssumingZeroNetDebt": 2585559.1136918818
+  },
+  "terminal": {
+    "monthlyCF": 100,
+    "waccAnnual": 0.12,
+    "gAnnual": 0.03,
+    "legacyDCF": 12715.54931529076,
+    "correctedDCF": 12658.806629718902,
+    "legacyWhenGEqualsWacc": 4558.7794703037325,
+    "expectedInvalidG": "validation error"
+  },
+  "dilution": {
+    "preMoney": 1000000,
+    "requestedOwnership": 0.2,
+    "legacyInvestment": 200000,
+    "actualOwnership": 0.16666666666666666,
+    "correctInvestment": 250000
+  },
+  "selectionBias": {
+    "values": [
+      -100,
+      0,
+      0,
+      100,
+      200
+    ],
+    "fullMedian": 0,
+    "positiveMedian": 150,
+    "retainedObservations": 2,
+    "totalObservations": 5
+  },
+  "constantHistogram": {
+    "finiteDensity": false,
+    "expected": "single mass/bin with all observations"
+  },
+  "triangular": {
+    "legacyMeanForBase100": 116.66666666666667,
+    "expectedMeanForMin50Mode100Max150": 100
+  }
+}

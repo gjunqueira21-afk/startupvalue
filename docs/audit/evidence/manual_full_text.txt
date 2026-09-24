@@ -1,0 +1,324 @@
+0001: 
+0002: StartupValue
+0003: Manual de Uso do Dashboard de Valuation
+0004: Como descobrir quanto vale a sua startup
+0005: Guia completo para iniciantes — do preenchimento dos dados à interpretação dos resultados
+0006: Versão 2.0  |  Uso Interno e Comercial
+0007: 
+0008: O que é o StartupValue?
+0009: O StartupValue é uma ferramenta de valuation — ou seja, uma calculadora que responde uma pergunta fundamental para qualquer empreendedor ou investidor:
+0010: 
+0011: "Quanto vale (ou pode valer) a minha startup?"
+0012: 
+0013: A ferramenta usa dois métodos reconhecidos pelo mercado financeiro para calcular esse valor e, de forma inovadora, simula milhares de cenários possíveis ao mesmo tempo — o que chamamos de Simulação Monte Carlo — para dar não apenas um número, mas uma faixa realista de possibilidades.
+0014: 
+0015: 💡  Dica:
+0016: Você não precisa saber nada de finanças para usar esse dashboard. Este manual vai guiar você passo a passo, e ao final explica todos os conceitos usados de forma simples.
+0017: 
+0018: Para quem é este dashboard?
+0019: Fundadores de startups que precisam saber o valor do negócio antes de captar investimento
+0020: Investidores-anjo e VCs que querem validar o valuation de uma oportunidade
+0021: Aceleradoras e consultorias que prestam serviço de avaliação de empresas
+0022: Qualquer pessoa que queira entender, de forma profissional, o potencial financeiro de uma empresa
+0023: 
+0024: Visão Geral do Dashboard
+0025: O dashboard é dividido em 3 etapas. Você deve completá-las em ordem:
+0026: 
+0027: 1
+0028: Dados Financeiros
+0029: Você informa as projeções de receita e despesas da empresa para os próximos 5 anos. É aqui que o sistema calcula o Valuation Pré-Money.
+0030: 
+0031: 2
+0032: Configurar Simulação
+0033: Você define como a simulação deve ser feita: qual distribuição estatística usar, qual o regime tributário, e os parâmetros do investidor (WACC, retorno alvo, etc.).
+0034: 
+0035: 3
+0036: Resultados
+0037: O dashboard exibe os resultados completos: gráficos de distribuição, tabelas estatísticas, métricas para o investidor, e você pode exportar o relatório.
+0038: 
+0039: 💡  Dica:
+0040: Sempre clique em 'Calcular Valuation Pré-Money' ao final da Etapa 1 antes de avançar. Isso garante que o sistema processa seus dados antes de rodar a simulação.
+0041: 
+0042: Etapa 1 — Dados Financeiros
+0043: Esta é a etapa mais importante. Aqui você insere as projeções financeiras da empresa. Todas as informações são em reais (R$) e representam valores mensais médios para cada ano.
+0044: 
+0045: 1.1 — Receita
+0046: A receita é o quanto a empresa espera faturar por mês em cada ano. Preencha os 5 campos:
+0047: 
+0048: Receita Mensal — Ano 1: quanto a empresa vai faturar por mês no primeiro ano
+0049: Receita Mensal — Ano 2: quanto a empresa espera faturar no segundo ano
+0050: Receita Mensal — Ano 3 a 5: idem para os anos seguintes
+0051: 
+0052: 📌  Exemplo prático:
+0053: Uma startup de SaaS que está no início e espera faturar R$ 20.000/mês no 1º ano, crescendo para R$ 200.000/mês no 5º ano. Esses são os números que você insere nos campos de Receita.
+0054: 
+0055: ⚠️  Atenção:
+0056: Seja realista. Projeções muito otimistas resultam em valuations irreais que podem prejudicar uma negociação com investidores sérios. Use dados do mercado e benchmarks do seu setor.
+0057: 
+0058: 1.2 — Despesas Administrativas
+0059: São os gastos do "escritório": aluguel, contas, softwares de gestão, contabilidade, serviços jurídicos, material de escritório, etc. Informe o valor médio mensal para cada ano.
+0060: 
+0061: 💡  Dica:
+0062: Dica: se sua startup ainda não tem histórico, pesquise os custos reais de cada item e some tudo. Exemplo: aluguel R$ 3.000 + contador R$ 800 + softwares R$ 500 = R$ 4.300/mês.
+0063: 
+0064: 1.3 — Despesas Gerais
+0065: São gastos variados que não se encaixam nas outras categorias: viagens, treinamentos, assinaturas de plataformas, serviços terceirizados pontuais, despesas de infraestrutura de TI, etc.
+0066: 
+0067: 1.4 — Despesas de Vendas
+0068: Tudo o que você gasta para vender: comissão de vendedores, marketing digital (Google Ads, Meta Ads), participação em feiras, materiais de marketing, CRM, etc.
+0069: 
+0070: 💡  Dica:
+0071: Regra geral: em startups, as despesas de vendas costumam representar entre 10% e 30% da receita nos primeiros anos. Se você ainda não tem histórico, use 15% como ponto de partida.
+0072: 
+0073: 1.5 — Headcount (Despesas de Pessoal)
+0074: É o total de salários + encargos trabalhistas (FGTS, férias, 13º, INSS, etc.) de toda a equipe por mês. Inclua sócios que recebem pró-labore.
+0075: 
+0076: ⚠️  Atenção:
+0077: Os encargos trabalhistas no Brasil giram em torno de 70% a 80% do salário bruto. Se um funcionário ganha R$ 5.000, o custo real para a empresa é aproximadamente R$ 8.500 a R$ 9.000/mês.
+0078: 
+0079: 1.6 — Botão: Calcular Valuation Pré-Money
+0080: Após preencher todos os campos, clique neste botão. O sistema irá:
+0081: Calcular o EBITDA mensal (receita menos todas as despesas)
+0082: Calcular o imposto sobre o resultado
+0083: Aplicar o modelo DCF para calcular o valor presente da empresa
+0084: Exibir as estatísticas descritivas da receita e o Valuation Pré-Money
+0085: 
+0086: O resultado aparece logo abaixo do botão, mostrando o Valuation Pré-Money estimado. Este valor serve de base para a Etapa 2.
+0087: 
+0088: Etapa 2 — Configurar Simulação
+0089: Aqui você define como o sistema vai simular os cenários futuros. Cada parâmetro influencia o resultado final. Vamos explicar cada um.
+0090: 
+0091: 2.1 — Distribuição da Receita
+0092: Este parâmetro define como o sistema vai variar a receita em cada um dos milhares de cenários simulados. É como dizer ao sistema: "quando o futuro é incerto, como você acha que a receita vai se comportar?"
+0093: 
+0094: Conceito
+0095: O que significa na prática
+0096: Normal
+0097: A receita oscila de forma simétrica em torno da média. É a opção mais comum e conservadora para empresas com crescimento previsível.
+0098: t-Student
+0099: Semelhante à Normal, mas com maior chance de valores extremos. Boa para startups em mercados mais voláteis.
+0100: Triangular
+0101: Define um valor mínimo, máximo e mais provável. Boa quando você tem uma ideia clara dos limites do seu crescimento.
+0102: Uniforme
+0103: Todos os valores entre um mínimo e um máximo são igualmente prováveis. Use quando há muita incerteza sem tendência clara.
+0104: LogNormal
+0105: A receita não pode ser negativa e tende a ter grandes variações para cima. Típico de startups com potencial de crescimento exponencial.
+0106: Linear
+0107: Você define manualmente o percentual da receita máxima que espera atingir em cada ano. Mais controle sobre a trajetória de crescimento.
+0108: Sistema
+0109: O sistema faz variações aleatórias uniformes em torno dos valores que você informou. Simples e direto.
+0110: 
+0111: 💡  Dica:
+0112: Se você não sabe qual escolher, comece com Normal. É a opção mais balanceada para a maioria dos casos.
+0113: 
+0114: 2.2 — Modelo Linear (quando selecionado)
+0115: Se você escolher a distribuição Linear, novos campos aparecem:
+0116: Receita Máxima: o teto de faturamento que você acredita que a empresa pode atingir
+0117: % Receita Máx — Ano 1 a 5: qual fração desse teto você espera atingir em cada ano
+0118: 
+0119: 💡  Dica:
+0120: Exemplo: se a Receita Máxima é R$ 5.000.000 e o Ano 3 tem % = 0,50, o sistema simulará ~R$ 2.500.000 de receita naquele ano, com variação aleatória.
+0121: 
+0122: 2.3 — Regime Tributário
+0123: Define como o imposto é calculado sobre o resultado da empresa. Escolha o que se aplica (ou se aplica ao futuro da sua empresa):
+0124: 
+0125: Simples Nacional: para empresas com faturamento anual até R$ 4,8 milhões. A alíquota varia por faixa de faturamento e pelo Anexo do Simples.
+0126: Lucro Presumido: para empresas com faturamento até R$ 78 milhões/ano. O imposto é calculado sobre uma margem presumida da receita.
+0127: Lucro Real: para empresas maiores ou com margens negativas. O imposto é calculado sobre o lucro real (EBITDA).
+0128: Otimizar Regime: o sistema escolhe automaticamente o regime mais vantajoso (menor imposto) para cada cenário simulado.
+0129: 
+0130: 💡  Dica:
+0131: Se sua startup ainda é pequena e está no início, use Simples Nacional. Se você ainda não tem certeza, use Otimizar — o sistema vai calcular o melhor cenário.
+0132: 
+0133: 2.4 — Parâmetros da Simulação
+0134: 
+0135: Número de Cenários
+0136: Quantos futuros possíveis o sistema vai simular. Mais cenários = resultado mais preciso, mas demora mais para calcular:
+0137: 500 — Rápido: bom para testes e ajustes iniciais
+0138: 1.000 — Padrão: equilíbrio entre precisão e velocidade (recomendado para uso comercial)
+0139: 2.000 / 5.000: para análises mais robustas e apresentações para investidores
+0140: 
+0141: Breakeven (mês)
+0142: É em qual mês você estima que a empresa vai atingir o ponto de equilíbrio — ou seja, quando as receitas passam a cobrir todos os custos. Se você acredita que será no 18º mês, coloque 18.
+0143: 
+0144: 💡  Dica:
+0145: O sistema usa esse valor como referência para calcular a probabilidade de a empresa atingir o breakeven dentro do período projetado.
+0146: 
+0147: Probabilidade de Sucesso
+0148: Em uma faixa de 0 a 1 (ou seja, 0% a 100%), qual a probabilidade de a startup ter sucesso e gerar os fluxos de caixa projetados? Por exemplo, 0,70 significa 70% de chance de sucesso.
+0149: 
+0150: ⚠️  Atenção:
+0151: Seja honesto. A maioria das startups em estágio inicial tem probabilidade de sucesso entre 30% e 50% (0,30 a 0,50). Startups com produto validado e receita recorrente podem usar 60% a 75%.
+0152: 
+0153: Taxa g (perpetuidade)
+0154: É a taxa de crescimento que o sistema assume após o 5º ano, quando a empresa entra em "modo cruzeiro" (crescimento estável). Normalmente entre 2% e 5%. O valor padrão de 0,03 significa 3% ao ano — em linha com a inflação esperada de longo prazo.
+0155: 
+0156: Participação Mínima
+0157: Qual o percentual mínimo da empresa que o investidor precisaria receber para que o deal faça sentido financeiro. Expresso em decimal: 0,15 = 15%.
+0158: 
+0159: Retorno Alvo (VC)
+0160: Qual o retorno anual que o investidor espera obter sobre o seu investimento. Fundos de Venture Capital tipicamente esperam entre 25% e 40% ao ano (0,25 a 0,40). Esse valor é usado no cálculo pelo Método VC.
+0161: 
+0162: Múltiplo EBITDA Alvo
+0163: No Método VC, o valor da empresa é estimado multiplicando o EBITDA do último ano por um múltiplo de mercado. Para startups de tecnologia, esse múltiplo costuma estar entre 6x e 15x. O padrão é 8x.
+0164: 
+0165: 2.5 — WACC (Taxa de Desconto)
+0166: O WACC (Weighted Average Cost of Capital) é a taxa de desconto usada no modelo DCF. Ela representa o custo do capital da empresa — ou seja, o mínimo de retorno que qualquer investidor espera por aplicar dinheiro num negócio como o seu.
+0167: 
+0168: WACC Constante: uma única taxa para todos os 5 anos. Mais simples. Use 0,25 (25%) como ponto de partida para startups em fase inicial.
+0169: WACC Variável por Ano: taxas diferentes para cada ano. Útil quando a empresa espera se tornar menos arriscada ao longo do tempo (WACC diminui conforme a empresa cresce e se consolida).
+0170: 
+0171: 💡  Dica:
+0172: Regra geral: startups em fase inicial têm WACC entre 25% e 40%. Empresas mais maduras e estabelecidas têm WACC entre 10% e 20%. Para começar, use 0,25.
+0173: 
+0174: 2.6 — Botão: Rodar Simulação Monte Carlo
+0175: Após configurar tudo, clique neste botão. O sistema vai:
+0176: Gerar centenas ou milhares de cenários diferentes de receita
+0177: Calcular o fluxo de caixa e os impostos para cada cenário
+0178: Calcular o Valuation pelo método DCF para cada cenário
+0179: Calcular o Valuation pelo Método VC para cada cenário
+0180: Consolidar os resultados em gráficos e tabelas
+0181: 
+0182: Uma barra de progresso mostra o andamento. Aguarde até a tela de resultados aparecer automaticamente.
+0183: 
+0184: Etapa 3 — Interpretando os Resultados
+0185: Esta é a etapa mais importante para o uso comercial do dashboard. Aqui você aprende a ler e usar os resultados gerados.
+0186: 
+0187: 3.1 — Os 4 Cartões Principais
+0188: No topo da página de resultados, 4 cartões mostram os números mais importantes:
+0189: 
+0190: Valuation Pré-Money: o valor calculado na Etapa 1, sem considerar o aporte do investidor. É o valor da empresa "do jeito que ela está".
+0191: Valuation Post-Money DCF (Mediana): o valor mediano calculado pela simulação usando o modelo DCF. É o mais conservador e técnico dos dois métodos.
+0192: Valuation Post-Money VC (Mediana): o valor mediano calculado pelo Método VC. Tende a ser mais otimista, especialmente para startups de alto crescimento.
+0193: Aporte Mínimo: o valor mínimo que o investidor precisaria aportar para obter a participação mínima definida por você na Etapa 2.
+0194: 
+0195: 3.2 — Gráficos de Distribuição
+0196: Os dois gráficos mostram como os valores do valuation se distribuem entre todos os cenários simulados:
+0197: 
+0198: As barras (histograma) mostram quantos cenários resultaram em cada faixa de valor
+0199: A linha mostra a curva de densidade — ela indica onde a maioria dos resultados se concentra
+0200: 
+0201: 💡  Dica:
+0202: Se a curva estiver concentrada em uma faixa estreita, o valuation é mais previsível. Se estiver espalhada, há muita incerteza — e você pode precisar revisar suas projeções.
+0203: 
+0204: 3.3 — Tabelas Estatísticas (DCF e VC)
+0205: As tabelas mostram a distribuição dos valores em percentis. Como interpretar:
+0206: 
+0207: Mínimo: o pior cenário simulado
+0208: Percentil 5% (P5): apenas 5% dos cenários ficaram abaixo deste valor — é o cenário muito pessimista
+0209: Percentil 25% (P25): cenário pessimista. Um em cada quatro cenários fica abaixo deste valor.
+0210: Média: a média aritmética de todos os cenários
+0211: Mediana (P50): metade dos cenários ficou acima, metade abaixo. É a estimativa mais equilibrada.
+0212: Percentil 75% (P75): cenário otimista. Três em cada quatro cenários ficam abaixo deste valor.
+0213: Percentil 90% (P90): apenas 10% dos cenários superam este valor — é o cenário muito otimista
+0214: Máximo: o melhor cenário simulado
+0215: 
+0216: 🎯  Como usar na negociação:
+0217: Use o P25 como o valor mínimo aceitável (piso da negociação), o P50 como referência central, e o P75 como o valor que você defende como realista-otimista. Nunca use o Máximo como referência — investidores experientes vão questionar.
+0218: 
+0219: 3.4 — Métricas de Interesse
+0220: Estes são os indicadores mais relevantes para uma conversa com investidores:
+0221: 
+0222: Valuation Pre-Money: valor da empresa antes do aporte
+0223: Aporte Mínimo: mínimo que o investidor precisa colocar
+0224: Participação Mínima: percentual mínimo do investidor
+0225: Múltiplo Valuation Post/Pre: quantas vezes o valor pós-money é maior que o pré-money
+0226: Valuation Post Mínimo: qual o menor valuation pós-money aceitável
+0227: P(Val > Val Post Mín): probabilidade de o valuation superar o mínimo
+0228: P(Breakeven Esperado): probabilidade de a empresa atingir o ponto de equilíbrio
+0229: Breakeven Mediano: em qual mês, em média, a empresa atinge o equilíbrio
+0230: 
+0231: 3.5 — Gráfico de Projeção EBITDA
+0232: O gráfico no final da página mostra mês a mês (ao longo de 60 meses) a evolução da receita e do EBITDA baseado nos dados que você inseriu na Etapa 1. Ele permite visualizar:
+0233: Em qual momento a empresa sai do prejuízo (quando EBITDA cruza a linha zero)
+0234: O ritmo de crescimento da receita
+0235: A diferença entre receita e EBITDA ao longo do tempo
+0236: 
+0237: 3.6 — Exportar Relatório
+0238: O botão verde flutuante no canto inferior direito ("Exportar Relatório") gera um arquivo .txt com todos os resultados principais. Você pode usar esse arquivo para:
+0239: Incluir os dados em uma apresentação para investidores
+0240: Salvar e comparar diferentes cenários
+0241: Compartilhar com sócios e advisors
+0242: 
+0243: Glossário de Conceitos
+0244: Esta seção explica, em linguagem simples, todos os conceitos financeiros usados no dashboard. Não é necessário memorizar tudo — use como referência quando precisar.
+0245: 
+0246: Conceitos de Valuation
+0247: 
+0248: Conceito
+0249: O que significa na prática
+0250: Valuation
+0251: É o valor estimado de uma empresa. Diferente de um imóvel (que tem um valor de mercado estabelecido), o valuation de uma startup é sempre uma estimativa baseada em modelos financeiros e expectativas futuras.
+0252: Valuation Pré-Money
+0253: O valor da empresa ANTES de receber o investimento. É como uma avaliação do que a empresa vale pelos seus próprios méritos, antes de qualquer novo capital entrar.
+0254: Valuation Pós-Money
+0255: O valor da empresa DEPOIS de receber o investimento. É calculado como: Valuation Pré-Money + Valor do Aporte. Exemplo: empresa vale R$ 5M (pré) e recebe R$ 1M → vale R$ 6M pós-money.
+0256: Aporte
+0257: O valor que o investidor coloca na empresa em troca de uma participação acionária.
+0258: Participação / Equity
+0259: O percentual da empresa que pertence a cada sócio ou investidor. Se você colocou R$ 1M em uma empresa com valuation pós-money de R$ 5M, sua participação é de 20%.
+0260: Múltiplo
+0261: Quantas vezes um valor é maior que outro. Múltiplo EBITDA de 8x significa que a empresa vale 8 vezes o seu lucro operacional anual.
+0262: 
+0263: Conceitos Financeiros
+0264: 
+0265: Conceito
+0266: O que significa na prática
+0267: Receita / Faturamento
+0268: O total que a empresa recebe dos seus clientes. Não é lucro — é tudo que entra antes de pagar qualquer custo.
+0269: EBITDA
+0270: Lucro antes de juros, impostos, depreciação e amortização. Na prática, é a receita menos os custos operacionais (despesas ADM + gerais + vendas + pessoal). É o indicador mais usado para medir a saúde operacional de uma empresa.
+0271: Fluxo de Caixa
+0272: O dinheiro que efetivamente entra e sai da empresa. É diferente do lucro contábil. Uma empresa pode ter lucro no papel e estar sem dinheiro em caixa (por causa de prazo de pagamento, dívidas, etc.).
+0273: Margem
+0274: A proporção de cada real de receita que se transforma em resultado. Margem EBITDA de 30% significa que, para cada R$ 100 faturados, R$ 30 viram resultado operacional.
+0275: Breakeven / Ponto de Equilíbrio
+0276: O momento em que a empresa começa a gerar mais receita do que gasta. Antes do breakeven, a empresa "queima caixa" (precisa de dinheiro externo para sobreviver). Após o breakeven, ela começa a se sustentar sozinha.
+0277: 
+0278: Conceitos de Modelos de Valuation
+0279: 
+0280: Conceito
+0281: O que significa na prática
+0282: DCF (Fluxo de Caixa Descontado)
+0283: O método mais usado por analistas financeiros. Ele projeta todos os fluxos de caixa futuros da empresa e os traz para o valor atual usando uma taxa de desconto (WACC). A lógica é: R$ 100 daqui a 5 anos não valem R$ 100 hoje, porque o dinheiro perde valor no tempo.
+0284: Método VC (Venture Capital)
+0285: Um método mais direto, preferido por investidores de risco. Estima o valor da empresa no futuro (usando o EBITDA do último ano multiplicado por um múltiplo de mercado) e desconta esse valor pelo retorno esperado do investidor.
+0286: WACC
+0287: Custo Médio Ponderado de Capital. É a taxa que representa o custo de usar dinheiro no negócio. Inclui o custo do capital próprio (o que os sócios esperam ganhar) e o custo da dívida. Para startups, geralmente entre 25% e 40% ao ano.
+0288: Perpetuidade
+0289: No modelo DCF, após os 5 anos projetados, assume-se que a empresa continua existindo e crescendo para sempre a uma taxa constante (a "taxa g"). O valor presente dessa operação eterna é chamado de perpetuidade, e é uma grande parte do valor de qualquer empresa.
+0290: Taxa g
+0291: A taxa de crescimento assumida na perpetuidade. Costuma ser entre 2% e 5% ao ano — próxima da inflação de longo prazo ou do crescimento do PIB, refletindo que empresas maduras crescem no ritmo da economia.
+0292: 
+0293: Conceitos Estatísticos
+0294: 
+0295: Conceito
+0296: O que significa na prática
+0297: Monte Carlo
+0298: Uma técnica de simulação que cria milhares de cenários futuros diferentes, variando os parâmetros de entrada (como a receita) de acordo com uma distribuição estatística. O resultado não é um único número, mas uma distribuição de possibilidades.
+0299: Percentil
+0300: Uma medida que divide os dados em 100 partes. O percentil 50% (ou mediana) divide os resultados ao meio. O percentil 90% significa que 90% dos resultados ficaram abaixo desse valor.
+0301: Distribuição Normal
+0302: A famosa "curva em sino". A maioria dos valores se concentra em torno da média, com valores extremos sendo menos prováveis. É a distribuição mais comum na natureza e em sistemas econômicos estáveis.
+0303: Distribuição LogNormal
+0304: Similar à normal, mas os valores não podem ser negativos e a cauda direita (valores muito altos) é mais longa. Ideal para receitas de startups, que não podem ser negativas e podem crescer exponencialmente.
+0305: Desvio Padrão / Volatilidade
+0306: Mede o quanto os resultados variam em torno da média. Alta volatilidade = resultados mais imprevisíveis = maior risco = valuation com intervalos mais amplos.
+0307: 
+0308: Conceitos Tributários
+0309: 
+0310: Conceito
+0311: O que significa na prática
+0312: Simples Nacional
+0313: Regime tributário simplificado para micro e pequenas empresas com faturamento anual até R$ 4,8 milhões. A alíquota varia de 4% a 33% dependendo do anexo (setor de atividade) e do faturamento acumulado.
+0314: Lucro Presumido
+0315: Regime para empresas com faturamento até R$ 78 milhões/ano. A base de cálculo do imposto é uma margem 'presumida' da receita, que varia por setor (8% para comércio, 32% para a maioria dos serviços).
+0316: Lucro Real
+0317: Regime em que o imposto é calculado sobre o lucro contábil real. Obrigatório para empresas com faturamento acima de R$ 78 milhões ou do setor financeiro. Pode ser vantajoso quando a empresa tem prejuízo (não paga imposto).
+0318: Alíquota
+0319: O percentual do imposto. No Simples Nacional, a alíquota efetiva pode variar de 4% a 33% sobre a receita. No Lucro Presumido, fica em torno de 13,33% a 34% dependendo do setor.
+0320: Anexo Simples
+0321: O Simples Nacional divide as atividades em 5 anexos (1 a 5), cada um com uma tabela de alíquotas diferente. Comércio = Anexo 1, Indústria = Anexo 2, Serviços técnicos e profissionais = Anexos 3, 4 ou 5.
+0322: 
+0323: StartupValue Dashboard — Manual do Usuário
+0324: Use este manual livremente para treinamento de clientes e equipes comerciais.

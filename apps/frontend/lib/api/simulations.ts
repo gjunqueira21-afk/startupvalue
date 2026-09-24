@@ -1,0 +1,245 @@
+import type { ValuationWizardDraft } from "@/components/wizard/types";
+import { apiRequest } from "./client";
+
+export interface CreateSimulationResponse {
+  simulation_id: string;
+  scenario_revision_id: string;
+  model_version: string;
+  tax_version: string;
+  seed: number;
+  simulation_count: number;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  result_hash: string | null;
+}
+
+export interface SimulationSummary {
+  basis: string;
+  percentiles: Record<"p5" | "p10" | "p25" | "p50" | "p75" | "p90" | "p95", number>;
+  minimum: number;
+  maximum: number;
+  mean: number;
+  standard_deviation: number;
+  failure_probability: number;
+  uncertainty_label: "NOT AVAILABLE";
+  uncertainty_ratio: number | null;
+  breakeven_probabilities: Record<string, number>;
+  breakeven_month_percentiles: Record<string, number>;
+  non_positive_probability: number;
+  histogram?: { edges: number[]; counts: number[] };
+}
+
+export interface Driver {
+  name: string;
+  rho: number | null;
+  direction: "positive" | "negative" | "neutral" | null;
+  count: number;
+  status: string;
+  population: string;
+}
+
+export interface DecisionResponse {
+  simulation_id: string;
+  result_hash: string;
+  basis: string;
+  scenario_count: number;
+  method: "spearman";
+  drivers: Driver[];
+}
+
+export interface ConditionalStats {
+  count: number;
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  reason: string | null;
+}
+
+export interface TargetResponse {
+  target: number;
+  probability: number;
+  hit_count: number;
+  miss_count: number;
+  scenario_count: number;
+  wilson95_low: number;
+  wilson95_high: number;
+  comparisons: {
+    name: string;
+    hit: ConditionalStats;
+    miss: ConditionalStats;
+    median_difference_hit_minus_miss: number | null;
+    status: string;
+  }[];
+}
+
+export interface SimulationResponse extends CreateSimulationResponse {
+  execution: "synchronous";
+  queue_status: "not_configured";
+  summary: SimulationSummary | null;
+  created_at: string;
+}
+
+interface StartupResponse {
+  id: string;
+}
+
+interface ScenarioResponse {
+  id: string;
+}
+
+interface RevisionResponse {
+  id: string;
+}
+
+type DistributionPayload =
+  | { kind: "constant"; value: number }
+  | { kind: "lognormal"; mean: number; coefficient_of_variation: number }
+  | {
+      kind: "student_t";
+      mean: number;
+      standard_deviation: number;
+      degrees_of_freedom: number;
+      lower: number;
+    }
+  | { kind: "triangular"; minimum: number; mode: number; maximum: number }
+  | { kind: "uniform"; minimum: number; maximum: number };
+
+function monthlyRevenue(draft: ValuationWizardDraft): number[] {
+  return draft.revenue.years.flatMap((value) =>
+    Array.from({ length: 12 }, () => draft.revenue.cadence === "annual" ? value / 12 : value),
+  );
+}
+
+function monthlyOpex(draft: ValuationWizardDraft): number[] {
+  const annual = Object.entries(draft.operatingCosts)
+    .filter(([key]) => key !== "capex")
+    .reduce((sum, [, value]) => sum + value, 0);
+  return Array.from({ length: 60 }, () => annual / 12);
+}
+
+function revenueUncertainty(draft: ValuationWizardDraft): DistributionPayload {
+  const cv = draft.monteCarlo.revenueUncertainty / 100;
+  if (cv === 0) return { kind: "constant", value: 1 };
+  if (draft.monteCarlo.distribution === "student_t") {
+    return {
+      kind: "student_t",
+      mean: 1,
+      standard_deviation: cv,
+      degrees_of_freedom: draft.monteCarlo.studentDegreesFreedom,
+      lower: 0,
+    };
+  }
+  if (draft.monteCarlo.distribution === "triangular") {
+    return {
+      kind: "triangular",
+      minimum: draft.monteCarlo.triangularMinimum,
+      mode: draft.monteCarlo.triangularMode,
+      maximum: draft.monteCarlo.triangularMaximum,
+    };
+  }
+  if (draft.monteCarlo.distribution === "uniform") {
+    return { kind: "uniform", minimum: Math.max(0, 1 - cv), maximum: 1 + cv };
+  }
+  return { kind: "lognormal", mean: 1, coefficient_of_variation: cv };
+}
+
+function profilePayload(draft: ValuationWizardDraft) {
+  return {
+    sector: draft.company.sector,
+    country: draft.company.country,
+    business_model: draft.company.businessModel,
+    stage: draft.company.stage,
+    founding_year: draft.company.foundingYear,
+    revenue: draft.revenue,
+    operating_costs: draft.operatingCosts,
+    metrics: draft.metrics,
+    valuation_assumptions: draft.valuation,
+    monte_carlo_assumptions: draft.monteCarlo,
+    wizard_schema_version: draft.schemaVersion,
+  };
+}
+
+function canonicalInputs(draft: ValuationWizardDraft) {
+  if (draft.metrics.grossMargin === null) {
+    throw new Error("Informe a margem bruta usada no DCF.");
+  }
+  return {
+    monthly_revenue: monthlyRevenue(draft),
+    monthly_opex: monthlyOpex(draft),
+    monthly_capex: Array.from({ length: 60 }, () => draft.operatingCosts.capex / 12),
+    gross_margin: draft.metrics.grossMargin / 100,
+    revenue_uncertainty: revenueUncertainty(draft),
+    cost_uncertainty: draft.monteCarlo.costUncertainty === 0
+      ? { kind: "constant" as const, value: 1 }
+      : { kind: "lognormal" as const, mean: 1, coefficient_of_variation: draft.monteCarlo.costUncertainty / 100 },
+    margin_uncertainty_pp: draft.monteCarlo.marginUncertainty / 100,
+    serial_correlation: draft.monteCarlo.serialCorrelation,
+    persistent_weight: 0.6,
+    annual_wacc: draft.valuation.wacc / 100,
+    terminal_growth: draft.valuation.terminalGrowth / 100,
+    excess_cash: draft.metrics.cash,
+    debt: draft.metrics.debt,
+    failure_probability_horizon: draft.monteCarlo.failureProbability / 100,
+    liquidation_value: 0,
+  };
+}
+
+export async function createSimulation(
+  draft: ValuationWizardDraft,
+  signal?: AbortSignal,
+): Promise<SimulationResponse> {
+  const startup = await apiRequest<StartupResponse>("/api/v1/startups", {
+    method: "POST",
+    body: JSON.stringify({
+      name: draft.company.name,
+      currency: "BRL",
+      profile: profilePayload(draft),
+    }),
+    signal,
+  });
+  const scenario = await apiRequest<ScenarioResponse>(
+    `/api/v1/startups/${startup.id}/scenarios`,
+    {
+      method: "POST",
+      body: JSON.stringify({ name: draft.company.scenarioName, mode: draft.mode }),
+      signal,
+    },
+  );
+  const revision = await apiRequest<RevisionResponse>(
+    `/api/v1/scenarios/${scenario.id}/revisions`,
+    {
+      method: "POST",
+      body: JSON.stringify({ inputs: canonicalInputs(draft) }),
+      signal,
+    },
+  );
+
+  return apiRequest<SimulationResponse>("/api/v1/simulations", {
+    method: "POST",
+    body: JSON.stringify({
+      scenario_revision_id: revision.id,
+      seed: draft.monteCarlo.randomSeed,
+      simulation_count: draft.monteCarlo.simulationCount,
+      idempotency_key: `wizard:${draft.monteCarlo.randomSeed}:${revision.id.slice(0, 8)}`,
+    }),
+    signal,
+  });
+}
+
+export function getSimulation(simulationId: string, signal?: AbortSignal) {
+  return apiRequest<SimulationResponse>(`/api/v1/simulations/${simulationId}`, {
+    method: "GET",
+    signal,
+  });
+}
+
+export function getDecision(simulationId: string, signal?: AbortSignal) {
+  return apiRequest<DecisionResponse>(`/api/v1/simulations/${simulationId}/decision`, {
+    method: "GET", signal,
+  });
+}
+
+export function getTarget(simulationId: string, target: number, signal?: AbortSignal) {
+  return apiRequest<TargetResponse>(`/api/v1/simulations/${simulationId}/target?value=${encodeURIComponent(target)}`, {
+    method: "GET", signal,
+  });
+}

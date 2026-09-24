@@ -1,0 +1,44 @@
+- generic [ref=e1] [box=0,0,390,3506]:
+  - banner [ref=e2] [box=0,0,390,64]:
+    - generic [ref=e3] [box=20,14,155,36]:
+      - generic [ref=e4] [box=20,14,36,36]: S
+      - generic [ref=e5] [box=68,18,107,28]: StartupValue
+    - generic [ref=e6] [box=196,20,174,24]: Valuation Engine v2.0
+  - generic [ref=e7] [box=0,64,390,57]:
+    - button "1 Dados Financeiros" [active] [ref=e8] [cursor=pointer] [box=20,64,192,56]:
+      - generic [ref=e9] [box=44,80,22,22]: "1"
+      - text: Dados Financeiros
+    - button "2 Configurar Simulação" [ref=e10] [cursor=pointer] [box=212,64,212,56]:
+      - generic [ref=e11] [box=236,80,22,22]: "2"
+      - text: Configurar Simulação
+    - button "3 Resultados" [ref=e12] [cursor=pointer] [box=424,64,146,56]:
+      - generic [ref=e13] [box=448,80,22,22]: "3"
+      - text: Resultados
+  - main [ref=e14] [box=0,121,390,3385]:
+    - generic [ref=e15] [box=20,141,350,3345]:
+      - heading "Dados Financeiros" [level=1] [ref=e16] [box=20,141,350,38]
+      - paragraph [ref=e17] [box=20,185,350,36]: Insira as projeções de receita e despesas para os próximos 5 anos (valores mensais em R$)
+      - generic [ref=e18] [box=20,253,350,74]:
+        - generic [ref=e19] [box=37,266,18,17]: 💡
+        - generic [ref=e20] [box=63,266,290,48]: Os dados são projetados mensalmente ao longo de 60 meses (5 anos). A receita será usada para calcular o fluxo de caixa e o valuation pré-money.
+      - generic [ref=e21] [box=20,347,350,461]:
+        - generic [ref=e22] [box=49,376,292,14]: Receita — Projeção Anual
+        - generic [ref=e23] [box=49,410,292,369]
+      - generic [ref=e44] [box=20,828,350,475]:
+        - generic [ref=e45] [box=49,857,292,28]: Despesas Administrativas — Média Mensal por Ano
+        - generic [ref=e46] [box=49,905,292,369]
+      - generic [ref=e62] [box=20,1323,350,475]:
+        - generic [ref=e63] [box=49,1352,292,28]: Despesas Gerais — Média Mensal por Ano
+        - generic [ref=e64] [box=49,1400,292,369]
+      - generic [ref=e80] [box=20,1818,350,475]:
+        - generic [ref=e81] [box=49,1847,292,28]: Despesas de Vendas — Média Mensal por Ano
+        - generic [ref=e82] [box=49,1895,292,369]
+      - generic [ref=e98] [box=20,2313,350,475]:
+        - generic [ref=e99] [box=49,2342,292,28]: Despesas de Pessoal (Headcount) — Média Mensal por Ano
+        - generic [ref=e100] [box=49,2390,292,369]
+      - button "▶ Calcular Valuation Pré-Money" [ref=e117] [cursor=pointer] [box=20,2816,270,43]
+      - generic [ref=e118] [box=20,2891,350,595]:
+        - heading "Estatísticas da Receita Pré-Money" [level=2] [ref=e120] [box=20,2916,350,28]
+        - generic [ref=e121] [box=20,2960,350,232]
+        - generic [ref=e146] [box=20,3216,350,200]
+        - button "Configurar Simulação →" [ref=e152] [cursor=pointer] [box=20,3444,218,42]

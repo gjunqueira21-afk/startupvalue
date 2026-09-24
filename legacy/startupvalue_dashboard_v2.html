@@ -1,0 +1,1666 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StartupValue — Valuation Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111418;
+    --surface2: #181c22;
+    --surface3: #1e242c;
+    --border: #252c36;
+    --accent: #00e5a0;
+    --accent2: #0095ff;
+    --accent3: #ff6b35;
+    --text: #e8edf3;
+    --text2: #8a97a8;
+    --text3: #4a5568;
+    --danger: #ff4757;
+    --warn: #ffd32a;
+    --gold: #f7b731;
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE TEXTURE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,12,15,0.92);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px;
+  }
+
+  .logo {
+    display: flex; align-items: center; gap: 12px;
+  }
+
+  .logo-mark {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px; color: #000; font-weight: bold;
+  }
+
+  .logo-text {
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px;
+    color: var(--text);
+    letter-spacing: -0.5px;
+  }
+
+  .logo-text span { color: var(--accent); }
+
+  .header-badge {
+    background: rgba(0,229,160,0.1);
+    border: 1px solid rgba(0,229,160,0.3);
+    color: var(--accent);
+    font-size: 11px; font-weight: 600; letter-spacing: 1px;
+    padding: 4px 10px; border-radius: 20px;
+    text-transform: uppercase;
+  }
+
+  /* ── TABS / STEPS ── */
+  .steps-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 40px;
+    display: flex; gap: 0;
+    overflow-x: auto;
+  }
+
+  .step-tab {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 24px;
+    border: none; background: transparent;
+    color: var(--text3);
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px; font-weight: 500; letter-spacing: 0.3px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .step-tab:hover { color: var(--text2); }
+  .step-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .step-tab.completed { color: var(--text2); }
+
+  .step-num {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--surface3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    transition: all 0.2s;
+  }
+
+  .step-tab.active .step-num {
+    background: var(--accent);
+    color: #000;
+  }
+
+  .step-tab.completed .step-num {
+    background: rgba(0,229,160,0.2);
+    color: var(--accent);
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .main { padding: 40px; max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
+
+  /* ── PANELS (each step) ── */
+  .panel { display: none; animation: fadeIn 0.3s ease; }
+  .panel.active { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── SECTION TITLES ── */
+  .section-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 28px;
+    color: var(--text);
+    margin-bottom: 6px;
+    letter-spacing: -0.5px;
+  }
+
+  .section-sub {
+    color: var(--text2);
+    font-size: 14px;
+    margin-bottom: 32px;
+    font-weight: 300;
+  }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    margin-bottom: 20px;
+  }
+
+  .card-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--accent);
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .card-title::before {
+    content: '';
+    width: 3px; height: 14px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  /* ── FORM GRID ── */
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+  .form-grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .form-grid-3 { grid-template-columns: repeat(3, 1fr); }
+
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.span-2 { grid-column: span 2; }
+
+  label {
+    font-size: 12px; font-weight: 500; color: var(--text2);
+    letter-spacing: 0.3px;
+  }
+
+  input[type="number"], input[type="text"], select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    padding: 10px 14px;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+
+  input[type="number"]:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,229,160,0.1);
+  }
+
+  select option { background: var(--surface2); }
+
+  /* ── CHECKBOX TOGGLE ── */
+  .toggle-group {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .toggle-group label { margin: 0; flex: 1; color: var(--text); font-size: 13px; cursor: pointer; }
+
+  .toggle {
+    position: relative; width: 36px; height: 20px;
+    background: var(--surface3); border-radius: 10px;
+    cursor: pointer; transition: background 0.2s;
+    flex-shrink: 0;
+  }
+
+  .toggle input { display: none; }
+
+  .toggle-knob {
+    position: absolute; top: 3px; left: 3px;
+    width: 14px; height: 14px;
+    background: var(--text3); border-radius: 50%;
+    transition: all 0.2s;
+  }
+
+  .toggle input:checked ~ .toggle-knob {
+    background: var(--accent);
+    transform: translateX(16px);
+  }
+
+  .toggle input:checked + .toggle { background: rgba(0,229,160,0.2); }
+
+  /* ── REGIME TRIBUTÁRIO CARDS ── */
+  .regime-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+  .regime-card {
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .regime-card:hover { border-color: var(--text3); }
+  .regime-card.selected { border-color: var(--accent); background: rgba(0,229,160,0.05); }
+
+  .regime-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .regime-card p { font-size: 12px; color: var(--text2); }
+  .regime-card .regime-icon { font-size: 24px; margin-bottom: 8px; }
+
+  /* ── WACC SECTION ── */
+  .wacc-type-selector {
+    display: flex; gap: 10px; margin-bottom: 20px;
+  }
+
+  .wacc-btn {
+    flex: 1; padding: 10px;
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    color: var(--text2);
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s;
+  }
+
+  .wacc-btn.active { border-color: var(--accent2); color: var(--accent2); background: rgba(0,149,255,0.05); }
+
+  .wacc-anos { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 28px;
+    border-radius: 10px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 14px; font-weight: 600;
+    border: none; cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #00c87a);
+    color: #000;
+  }
+
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,229,160,0.3); }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text2);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover { border-color: var(--text3); color: var(--text); }
+
+  .btn-danger {
+    background: rgba(255,71,87,0.1);
+    color: var(--danger);
+    border: 1px solid rgba(255,71,87,0.3);
+  }
+
+  .btn:disabled {
+    opacity: 0.5; cursor: not-allowed; transform: none !important;
+  }
+
+  .btn-group { display: flex; gap: 12px; margin-top: 28px; }
+
+  /* ── PROGRESS / LOADING ── */
+  .sim-progress {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px;
+    text-align: center;
+    display: none;
+  }
+
+  .sim-progress.visible { display: block; }
+
+  .progress-bar-wrap {
+    background: var(--surface3);
+    border-radius: 4px; height: 6px;
+    margin: 20px auto; max-width: 400px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    width: 0%;
+    transition: width 0.1s;
+  }
+
+  .progress-label {
+    font-size: 13px; color: var(--text2);
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ── RESULTS ── */
+  .results-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    position: relative; overflow: hidden;
+  }
+
+  .metric-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  }
+
+  .metric-card.accent::before { background: var(--accent); }
+  .metric-card.blue::before { background: var(--accent2); }
+  .metric-card.orange::before { background: var(--accent3); }
+  .metric-card.gold::before { background: var(--gold); }
+
+  .metric-label {
+    font-size: 11px; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 1px; font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .metric-value {
+    font-family: 'DM Serif Display', serif;
+    font-size: 26px; color: var(--text);
+    letter-spacing: -0.5px;
+  }
+
+  .metric-value.accent { color: var(--accent); }
+  .metric-value.blue { color: var(--accent2); }
+
+  .metric-sub {
+    font-size: 11px; color: var(--text3);
+    margin-top: 4px;
+  }
+
+  /* ── STATS TABLE ── */
+  .stats-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+    margin-bottom: 24px;
+  }
+
+  .stats-table {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .stats-table-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase;
+    display: flex; gap: 8px; align-items: center;
+  }
+
+  .stats-table-header.dcf { color: var(--accent); }
+  .stats-table-header.vc { color: var(--accent2); }
+
+  .stats-row-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 20px;
+    border-bottom: 1px solid rgba(37,44,54,0.5);
+    font-size: 13px;
+  }
+
+  .stats-row-item:last-child { border-bottom: none; }
+  .stats-row-item .key { color: var(--text2); }
+  .stats-row-item .val { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--text); }
+  .stats-row-item .val.highlight { color: var(--accent); font-weight: 600; }
+
+  /* ── CHART CONTAINER ── */
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+
+  .chart-title {
+    font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--text2);
+    margin-bottom: 20px;
+  }
+
+  canvas { max-height: 250px; }
+
+  /* ── METRICAS ── */
+  .metricas-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  /* ── UPLOAD AREA ── */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface2);
+  }
+
+  .upload-zone:hover { border-color: var(--accent); background: rgba(0,229,160,0.02); }
+  .upload-zone.dragging { border-color: var(--accent); background: rgba(0,229,160,0.05); }
+  .upload-zone.uploaded { border-color: var(--accent); border-style: solid; }
+
+  .upload-icon { font-size: 48px; margin-bottom: 12px; }
+  .upload-text { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+  .upload-sub { font-size: 13px; color: var(--text2); }
+  .upload-filename { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--accent); margin-top: 8px; }
+
+  input[type="file"] { display: none; }
+
+  /* ── HINT ── */
+  .hint {
+    background: rgba(0,149,255,0.05);
+    border: 1px solid rgba(0,149,255,0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px; color: var(--text2);
+    margin-bottom: 20px;
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+
+  .hint .icon { flex-shrink: 0; }
+
+  /* ── DISTRIBUIÇÃO SELECTOR ── */
+  .dist-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+
+  .dist-card {
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 12px;
+    cursor: pointer; text-align: center;
+    transition: all 0.2s;
+  }
+
+  .dist-card:hover { border-color: var(--text3); }
+  .dist-card.selected { border-color: var(--accent3); background: rgba(255,107,53,0.05); }
+  .dist-card .dist-icon { font-size: 22px; margin-bottom: 6px; }
+  .dist-card .dist-name { font-size: 12px; font-weight: 600; }
+
+  /* ── LINEAR PARAMS ── */
+  #linear-params { display: none; }
+  #linear-params.visible { display: block; }
+
+  /* ── SEPARATOR ── */
+  .sep { height: 1px; background: var(--border); margin: 24px 0; }
+
+  /* ── INPUT SUFFIX ── */
+  .input-wrap { position: relative; }
+  .input-suffix {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    font-size: 12px; color: var(--text3); pointer-events: none;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .input-wrap input { padding-right: 36px; }
+
+  /* ── SUMMARY STATS CHART ── */
+  .summary-stats-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .ss-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .ss-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .ss-value { font-family: 'DM Mono', monospace; font-size: 16px; color: var(--text); }
+
+  /* ── EXPORT BUTTON ── */
+  .export-btn {
+    position: fixed; bottom: 32px; right: 32px;
+    background: var(--accent);
+    color: #000;
+    padding: 14px 24px;
+    border-radius: 30px;
+    border: none;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700; font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 8px 32px rgba(0,229,160,0.3);
+    display: none;
+    align-items: center; gap: 8px;
+    z-index: 50;
+    transition: all 0.2s;
+  }
+
+  .export-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,229,160,0.4); }
+  .export-btn.visible { display: flex; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .main { padding: 20px; }
+    .header { padding: 0 20px; }
+    .steps-bar { padding: 0 20px; }
+    .results-grid { grid-template-columns: repeat(2, 1fr); }
+    .chart-grid { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: 1fr; }
+    .regime-grid { grid-template-columns: 1fr; }
+    .metricas-grid { grid-template-columns: repeat(2, 1fr); }
+    .dist-grid { grid-template-columns: repeat(2, 1fr); }
+    .wacc-anos { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  /* ── ANIMATIONS ── */
+  .metric-card { transition: transform 0.2s; }
+  .metric-card:hover { transform: translateY(-2px); }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-mark">S</div>
+    <span class="logo-text">Startup<span>Value</span></span>
+  </div>
+  <div class="header-badge">Valuation Engine v2.0</div>
+</header>
+
+<!-- STEP TABS -->
+<div class="steps-bar" id="stepsBar">
+  <button class="step-tab active" data-step="1" onclick="goToStep(1)">
+    <div class="step-num">1</div> Dados Financeiros
+  </button>
+  <button class="step-tab" data-step="2" onclick="goToStep(2)">
+    <div class="step-num">2</div> Configurar Simulação
+  </button>
+  <button class="step-tab" data-step="3" onclick="goToStep(3)">
+    <div class="step-num">3</div> Resultados
+  </button>
+</div>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- ═══════════ STEP 1: DADOS FINANCEIROS ═══════════ -->
+  <div class="panel active" id="panel-1">
+    <h1 class="section-title">Dados Financeiros</h1>
+    <p class="section-sub">Insira as projeções de receita e despesas para os próximos 5 anos (valores mensais em R$)</p>
+
+    <div class="hint">
+      <span class="icon">💡</span>
+      <span>Os dados são projetados mensalmente ao longo de 60 meses (5 anos). A receita será usada para calcular o fluxo de caixa e o valuation pré-money.</span>
+    </div>
+
+    <!-- RECEITA -->
+    <div class="card">
+      <div class="card-title">Receita — Projeção Anual</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Receita Mensal — Ano 1 (R$)</label>
+          <div class="input-wrap">
+            <input type="number" id="rec1" value="50000" min="0" step="1000">
+            <span class="input-suffix">R$</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Receita Mensal — Ano 2 (R$)</label>
+          <div class="input-wrap">
+            <input type="number" id="rec2" value="90000" min="0" step="1000">
+            <span class="input-suffix">R$</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Receita Mensal — Ano 3 (R$)</label>
+          <div class="input-wrap">
+            <input type="number" id="rec3" value="160000" min="0" step="1000">
+            <span class="input-suffix">R$</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Receita Mensal — Ano 4 (R$)</label>
+          <div class="input-wrap">
+            <input type="number" id="rec4" value="260000" min="0" step="1000">
+            <span class="input-suffix">R$</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Receita Mensal — Ano 5 (R$)</label>
+          <div class="input-wrap">
+            <input type="number" id="rec5" value="400000" min="0" step="1000">
+            <span class="input-suffix">R$</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DESPESAS ADM -->
+    <div class="card">
+      <div class="card-title">Despesas Administrativas — Média Mensal por Ano</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Ano 1 (R$/mês)</label><input type="number" id="dadm1" value="8000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 2 (R$/mês)</label><input type="number" id="dadm2" value="12000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 3 (R$/mês)</label><input type="number" id="dadm3" value="18000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 4 (R$/mês)</label><input type="number" id="dadm4" value="26000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 5 (R$/mês)</label><input type="number" id="dadm5" value="38000" min="0" step="500"></div>
+      </div>
+    </div>
+
+    <!-- DESPESAS GERAIS -->
+    <div class="card">
+      <div class="card-title">Despesas Gerais — Média Mensal por Ano</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Ano 1 (R$/mês)</label><input type="number" id="dger1" value="5000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 2 (R$/mês)</label><input type="number" id="dger2" value="8000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 3 (R$/mês)</label><input type="number" id="dger3" value="12000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 4 (R$/mês)</label><input type="number" id="dger4" value="18000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 5 (R$/mês)</label><input type="number" id="dger5" value="25000" min="0" step="500"></div>
+      </div>
+    </div>
+
+    <!-- DESPESAS VENDAS -->
+    <div class="card">
+      <div class="card-title">Despesas de Vendas — Média Mensal por Ano</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Ano 1 (R$/mês)</label><input type="number" id="dven1" value="4000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 2 (R$/mês)</label><input type="number" id="dven2" value="7000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 3 (R$/mês)</label><input type="number" id="dven3" value="12000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 4 (R$/mês)</label><input type="number" id="dven4" value="19000" min="0" step="500"></div>
+        <div class="form-group"><label>Ano 5 (R$/mês)</label><input type="number" id="dven5" value="28000" min="0" step="500"></div>
+      </div>
+    </div>
+
+    <!-- HEADCOUNT -->
+    <div class="card">
+      <div class="card-title">Despesas de Pessoal (Headcount) — Média Mensal por Ano</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Ano 1 (R$/mês)</label><input type="number" id="dhc1" value="15000" min="0" step="1000"></div>
+        <div class="form-group"><label>Ano 2 (R$/mês)</label><input type="number" id="dhc2" value="28000" min="0" step="1000"></div>
+        <div class="form-group"><label>Ano 3 (R$/mês)</label><input type="number" id="dhc3" value="50000" min="0" step="1000"></div>
+        <div class="form-group"><label>Ano 4 (R$/mês)</label><input type="number" id="dhc4" value="80000" min="0" step="1000"></div>
+        <div class="form-group"><label>Ano 5 (R$/mês)</label><input type="number" id="dhc5" value="120000" min="0" step="1000"></div>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="calcPreMoney()">
+        ▶ Calcular Valuation Pré-Money
+      </button>
+    </div>
+
+    <!-- SUMMARY STATS (after pre-money calc) -->
+    <div id="pre-money-result" style="display:none; margin-top: 32px;">
+      <div class="sep"></div>
+      <h2 class="section-title" style="font-size:20px; margin-bottom: 16px;">Estatísticas da Receita Pré-Money</h2>
+      <div class="summary-stats-grid" id="ssGrid"></div>
+      <div class="card">
+        <div class="card-title">Valuation Pré-Money (DCF)</div>
+        <div style="display:flex; align-items:baseline; gap:12px;">
+          <div id="valPre" class="metric-value accent" style="font-size:40px;"></div>
+          <div style="color:var(--text2); font-size:14px;">estimativa pré-simulação</div>
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="goToStep(2)">Configurar Simulação →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ STEP 2: CONFIGURAÇÃO ═══════════ -->
+  <div class="panel" id="panel-2">
+    <h1 class="section-title">Configurar Simulação</h1>
+    <p class="section-sub">Defina os parâmetros do modelo Monte Carlo para calcular o valuation pós-money</p>
+
+    <!-- DISTRIBUIÇÃO DA RECEITA -->
+    <div class="card">
+      <div class="card-title">Distribuição da Receita</div>
+      <div class="dist-grid" id="distGrid">
+        <div class="dist-card selected" data-dist="Normal" onclick="selectDist(this, 'Normal')">
+          <div class="dist-icon">📊</div>
+          <div class="dist-name">Normal</div>
+        </div>
+        <div class="dist-card" data-dist="t-Student" onclick="selectDist(this, 't-Student')">
+          <div class="dist-icon">📈</div>
+          <div class="dist-name">t-Student</div>
+        </div>
+        <div class="dist-card" data-dist="Triangular" onclick="selectDist(this, 'Triangular')">
+          <div class="dist-icon">🔺</div>
+          <div class="dist-name">Triangular</div>
+        </div>
+        <div class="dist-card" data-dist="Uniforme" onclick="selectDist(this, 'Uniforme')">
+          <div class="dist-icon">▬</div>
+          <div class="dist-name">Uniforme</div>
+        </div>
+        <div class="dist-card" data-dist="LogNormal" onclick="selectDist(this, 'LogNormal')">
+          <div class="dist-icon">📉</div>
+          <div class="dist-name">LogNormal</div>
+        </div>
+        <div class="dist-card" data-dist="Linear" onclick="selectDist(this, 'Linear')">
+          <div class="dist-icon">📐</div>
+          <div class="dist-name">Linear</div>
+        </div>
+        <div class="dist-card" data-dist="Sistema" onclick="selectDist(this, 'Sistema')">
+          <div class="dist-icon">🔧</div>
+          <div class="dist-name">Sistema</div>
+        </div>
+      </div>
+
+      <!-- LINEAR PARAMS -->
+      <div id="linear-params" style="margin-top: 20px;">
+        <div class="sep"></div>
+        <div style="font-size:12px; font-weight:600; color:var(--text2); margin-bottom: 12px; text-transform:uppercase; letter-spacing:1px;">Parâmetros Modelo Linear</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Receita Máxima (R$)</label>
+            <input type="number" id="linMax" value="5000000" min="0">
+          </div>
+          <div class="form-group"><label>% Receita Máx — Ano 1</label><input type="number" id="lin1" value="0.10" step="0.01" min="0" max="1"></div>
+          <div class="form-group"><label>% Receita Máx — Ano 2</label><input type="number" id="lin2" value="0.25" step="0.01" min="0" max="1"></div>
+          <div class="form-group"><label>% Receita Máx — Ano 3</label><input type="number" id="lin3" value="0.50" step="0.01" min="0" max="1"></div>
+          <div class="form-group"><label>% Receita Máx — Ano 4</label><input type="number" id="lin4" value="0.75" step="0.01" min="0" max="1"></div>
+          <div class="form-group"><label>% Receita Máx — Ano 5</label><input type="number" id="lin5" value="1.00" step="0.01" min="0" max="1"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REGIME TRIBUTÁRIO -->
+    <div class="card">
+      <div class="card-title">Regime Tributário</div>
+      <div class="regime-grid" id="regimeGrid">
+        <div class="regime-card selected" data-regime="simples" onclick="selectRegime(this, 'simples')">
+          <div class="regime-icon">🟢</div>
+          <h4>Simples Nacional</h4>
+          <p>Faturamento até R$4,8MM/ano</p>
+        </div>
+        <div class="regime-card" data-regime="presumido" onclick="selectRegime(this, 'presumido')">
+          <div class="regime-icon">🔵</div>
+          <h4>Lucro Presumido</h4>
+          <p>Alíquota presumida sobre receita</p>
+        </div>
+        <div class="regime-card" data-regime="real" onclick="selectRegime(this, 'real')">
+          <div class="regime-icon">⚫</div>
+          <h4>Lucro Real</h4>
+          <p>IRPJ/CSLL sobre lucro real</p>
+        </div>
+        <div class="regime-card" data-regime="otimizar" onclick="selectRegime(this, 'otimizar')">
+          <div class="regime-icon">✨</div>
+          <h4>Otimizar Regime</h4>
+          <p>Seleciona automaticamente o melhor</p>
+        </div>
+      </div>
+
+      <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px;" id="regime-sub-params">
+        <div class="form-group" id="anexo-simples-group">
+          <label>Anexo Simples (1–5)</label>
+          <select id="anexoSimples">
+            <option value="1">Anexo 1 — Comércio</option>
+            <option value="2">Anexo 2 — Indústria</option>
+            <option value="3" selected>Anexo 3 — Serviços Profissionais</option>
+            <option value="4">Anexo 4 — Serviços Técnicos</option>
+            <option value="5">Anexo 5 — Outros Serviços</option>
+          </select>
+        </div>
+        <div class="form-group" id="aliquota-presumido-group" style="display:none;">
+          <label>Alíquota Lucro Presumido (%)</label>
+          <select id="aliqPresumido">
+            <option value="1">8% (Comércio/Indústria)</option>
+            <option value="2">16% (Transporte)</option>
+            <option value="3" selected>32% (Serviços Gerais)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- PARÂMETROS DA SIMULAÇÃO -->
+    <div class="card">
+      <div class="card-title">Parâmetros da Simulação</div>
+      <div class="form-grid form-grid-3">
+        <div class="form-group">
+          <label>Número de Cenários</label>
+          <select id="nSim">
+            <option value="500">500 — Rápido</option>
+            <option value="1000" selected>1.000 — Padrão</option>
+            <option value="2000">2.000 — Preciso</option>
+            <option value="5000">5.000 — Alta Precisão</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Breakeven (mês)</label>
+          <input type="number" id="breakeven" value="18" min="1" max="60">
+        </div>
+        <div class="form-group">
+          <label>Prob. de Sucesso (%)</label>
+          <div class="input-wrap">
+            <input type="number" id="probSucesso" value="0.70" min="0" max="1" step="0.01">
+            <span class="input-suffix">x</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Taxa g (perpetuidade %)</label>
+          <div class="input-wrap">
+            <input type="number" id="taxaG" value="0.03" min="0" max="0.2" step="0.01">
+            <span class="input-suffix">x</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Participação Mínima (%)</label>
+          <div class="input-wrap">
+            <input type="number" id="partMin" value="0.15" min="0" max="1" step="0.01">
+            <span class="input-suffix">x</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Retorno Alvo (VC %)</label>
+          <div class="input-wrap">
+            <input type="number" id="retAlvo" value="0.30" min="0" max="5" step="0.01">
+            <span class="input-suffix">x</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Múltiplo EBITDA Alvo</label>
+          <input type="number" id="multEbitda" value="8" min="1" max="50" step="0.5">
+        </div>
+      </div>
+    </div>
+
+    <!-- WACC -->
+    <div class="card">
+      <div class="card-title">WACC — Taxa de Desconto</div>
+      <div class="wacc-type-selector">
+        <button class="wacc-btn active" id="waccConstBtn" onclick="setWaccType('constante')">WACC Constante</button>
+        <button class="wacc-btn" id="waccVarBtn" onclick="setWaccType('variavel')">WACC Variável por Ano</button>
+      </div>
+
+      <div id="wacc-constante-section">
+        <div class="form-group" style="max-width: 220px;">
+          <label>WACC Anual</label>
+          <div class="input-wrap">
+            <input type="number" id="waccConst" value="0.25" min="0" max="2" step="0.01">
+            <span class="input-suffix">x</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="wacc-variavel-section" style="display:none;">
+        <div class="wacc-anos">
+          <div class="form-group"><label>Ano 1</label><input type="number" id="wacc1" value="0.30" min="0" max="2" step="0.01"></div>
+          <div class="form-group"><label>Ano 2</label><input type="number" id="wacc2" value="0.28" min="0" max="2" step="0.01"></div>
+          <div class="form-group"><label>Ano 3</label><input type="number" id="wacc3" value="0.25" min="0" max="2" step="0.01"></div>
+          <div class="form-group"><label>Ano 4</label><input type="number" id="wacc4" value="0.23" min="0" max="2" step="0.01"></div>
+          <div class="form-group"><label>Ano 5</label><input type="number" id="wacc5" value="0.20" min="0" max="2" step="0.01"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-secondary" onclick="goToStep(1)">← Voltar</button>
+      <button class="btn btn-primary" id="runSimBtn" onclick="runSimulation()">
+        🚀 Rodar Simulação Monte Carlo
+      </button>
+    </div>
+
+    <!-- PROGRESS -->
+    <div class="sim-progress" id="simProgress">
+      <div style="font-size:40px; margin-bottom: 16px;">⚙️</div>
+      <div style="font-family: 'DM Serif Display', serif; font-size: 22px; margin-bottom: 8px;">Simulando cenários...</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-label" id="progressLabel">0 / 1000 cenários</div>
+    </div>
+  </div>
+
+  <!-- ═══════════ STEP 3: RESULTADOS ═══════════ -->
+  <div class="panel" id="panel-3">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 32px;">
+      <div>
+        <h1 class="section-title">Resultados do Valuation</h1>
+        <p class="section-sub">Análise completa baseada em <span id="nSimLabel">1.000</span> cenários Monte Carlo</p>
+      </div>
+      <button class="btn btn-secondary" onclick="goToStep(2)">← Reconfigurar</button>
+    </div>
+
+    <!-- MÉTRICAS PRINCIPAIS -->
+    <div class="results-grid">
+      <div class="metric-card accent">
+        <div class="metric-label">Valuation Pré-Money</div>
+        <div class="metric-value accent" id="res-pre">—</div>
+        <div class="metric-sub">DCF Determinístico</div>
+      </div>
+      <div class="metric-card blue">
+        <div class="metric-label">Valuation Post-Money (DCF Mediana)</div>
+        <div class="metric-value blue" id="res-post-dcf-med">—</div>
+        <div class="metric-sub">Percentil 50% Monte Carlo</div>
+      </div>
+      <div class="metric-card orange">
+        <div class="metric-label">Valuation Post-Money (VC Mediana)</div>
+        <div class="metric-value" id="res-post-vc-med" style="color:var(--accent3)">—</div>
+        <div class="metric-sub">Método VC — P50</div>
+      </div>
+      <div class="metric-card gold">
+        <div class="metric-label">Aporte Mínimo</div>
+        <div class="metric-value" id="res-aporte" style="color:var(--gold)">—</div>
+        <div class="metric-sub">Para participação mínima</div>
+      </div>
+    </div>
+
+    <!-- CHARTS -->
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-title">🔵 Distribuição Valuation DCF</div>
+        <canvas id="chartDCF"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">🟠 Distribuição Valuation VC</div>
+        <canvas id="chartVC"></canvas>
+      </div>
+    </div>
+
+    <!-- STATS TABLES -->
+    <div class="stats-row">
+      <div class="stats-table">
+        <div class="stats-table-header dcf">📊 Estatísticas — Valuation DCF</div>
+        <div id="statsDCF"></div>
+      </div>
+      <div class="stats-table">
+        <div class="stats-table-header vc">📈 Estatísticas — Valuation VC</div>
+        <div id="statsVC"></div>
+      </div>
+    </div>
+
+    <!-- MÉTRICAS DE INTERESSE -->
+    <div class="card">
+      <div class="card-title">Métricas de Interesse para o Investidor</div>
+      <div class="metricas-grid" id="metricasGrid"></div>
+    </div>
+
+    <!-- CASHFLOW CHART -->
+    <div class="chart-card" style="margin-bottom: 24px;">
+      <div class="chart-title">💰 Projeção EBITDA Pré-Money (Mensal)</div>
+      <canvas id="chartCashflow" style="max-height: 220px;"></canvas>
+    </div>
+
+  </div>
+
+</main>
+
+<!-- EXPORT BUTTON -->
+<button class="export-btn" id="exportBtn" onclick="exportResults()">
+  ⬇ Exportar Relatório
+</button>
+
+<script>
+// ════════════════════════════════════════════════════
+//  GLOBAL STATE
+// ════════════════════════════════════════════════════
+let state = {
+  currentStep: 1,
+  distribSelected: 'Normal',
+  regimeSelected: 'simples',
+  waccType: 'constante',
+  valPre: 0,
+  receita: [],
+  ebitda: [],
+  results: null
+};
+
+// ════════════════════════════════════════════════════
+//  NAVIGATION
+// ════════════════════════════════════════════════════
+function goToStep(n) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + n).classList.add('active');
+
+  document.querySelectorAll('.step-tab').forEach(t => {
+    const s = parseInt(t.dataset.step);
+    t.classList.remove('active', 'completed');
+    if (s === n) t.classList.add('active');
+    else if (s < n) t.classList.add('completed');
+  });
+
+  state.currentStep = n;
+  if (n === 3) document.getElementById('exportBtn').classList.add('visible');
+  else document.getElementById('exportBtn').classList.remove('visible');
+}
+
+// ════════════════════════════════════════════════════
+//  UI SELECTORS
+// ════════════════════════════════════════════════════
+function selectDist(el, dist) {
+  document.querySelectorAll('.dist-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  state.distribSelected = dist;
+  const lp = document.getElementById('linear-params');
+  if (dist === 'Linear') lp.classList.add('visible');
+  else lp.classList.remove('visible');
+}
+
+function selectRegime(el, regime) {
+  document.querySelectorAll('.regime-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  state.regimeSelected = regime;
+
+  const ag = document.getElementById('anexo-simples-group');
+  const pg = document.getElementById('aliquota-presumido-group');
+  ag.style.display = 'none'; pg.style.display = 'none';
+  if (regime === 'simples') ag.style.display = '';
+  if (regime === 'presumido') pg.style.display = '';
+}
+
+function setWaccType(type) {
+  state.waccType = type;
+  const cb = document.getElementById('waccConstBtn');
+  const vb = document.getElementById('waccVarBtn');
+  const cs = document.getElementById('wacc-constante-section');
+  const vs = document.getElementById('wacc-variavel-section');
+  if (type === 'constante') {
+    cb.classList.add('active'); vb.classList.remove('active');
+    cs.style.display = ''; vs.style.display = 'none';
+  } else {
+    vb.classList.add('active'); cb.classList.remove('active');
+    vs.style.display = ''; cs.style.display = 'none';
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════════
+function v(id) { return parseFloat(document.getElementById(id).value) || 0; }
+
+function fmtBRL(val) {
+  if (Math.abs(val) >= 1e9) return 'R$ ' + (val / 1e9).toFixed(2) + 'B';
+  if (Math.abs(val) >= 1e6) return 'R$ ' + (val / 1e6).toFixed(2) + 'M';
+  if (Math.abs(val) >= 1e3) return 'R$ ' + (val / 1e3).toFixed(1) + 'k';
+  return 'R$ ' + val.toFixed(0);
+}
+
+function fmtPct(val) { return (val * 100).toFixed(1) + '%'; }
+function fmtX(val) { return val.toFixed(2) + 'x'; }
+
+// Box–Muller normal
+function randn() {
+  let u = 0, v2 = 0;
+  while (!u) u = Math.random();
+  while (!v2) v2 = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v2);
+}
+
+function lognorm(mu, sigma) {
+  return Math.exp(mu + sigma * randn());
+}
+
+function percentile(arr, p) {
+  const s = [...arr].sort((a, b) => a - b);
+  const idx = (p / 100) * (s.length - 1);
+  const low = Math.floor(idx), high = Math.ceil(idx);
+  return s[low] + (s[high] - s[low]) * (idx - low);
+}
+
+// ════════════════════════════════════════════════════
+//  BUILD REVENUE ARRAY (60 months)
+// ════════════════════════════════════════════════════
+function buildReceita() {
+  const months = [v('rec1'),v('rec2'),v('rec3'),v('rec4'),v('rec5')];
+  const r = [];
+  for (let y = 0; y < 5; y++)
+    for (let m = 0; m < 12; m++) r.push(months[y]);
+  return r;
+}
+
+function buildDespesas(prefix) {
+  const d = [];
+  for (let y = 1; y <= 5; y++) {
+    const val = v(prefix + y);
+    for (let m = 0; m < 12; m++) d.push(val);
+  }
+  return d;
+}
+
+// ════════════════════════════════════════════════════
+//  TAX CALCULATION
+// ════════════════════════════════════════════════════
+function calcImposto(faturamentoAnual, ebitdaAnual, regime, anexo, aliqPresumido) {
+  if (regime === 'real') {
+    return ebitdaAnual > 0 ? ebitdaAnual * 0.34 : 0;
+  }
+  if (regime === 'presumido') {
+    const aliqMap = {'1': 0.08, '2': 0.16, '3': 0.32};
+    const aliq = aliqMap[String(aliqPresumido)] || 0.32;
+    const baseCalc = faturamentoAnual * aliq;
+    return baseCalc * 0.34;
+  }
+  // Simples Nacional
+  if (faturamentoAnual <= 0) return 0;
+  const tables = {
+    '1': [{lim:180000,aliq:0.04,ded:0},{lim:360000,aliq:0.073,ded:5940},{lim:720000,aliq:0.095,ded:13860},{lim:1800000,aliq:0.107,ded:22500},{lim:3600000,aliq:0.143,ded:87300},{lim:4800000,aliq:0.19,ded:378000}],
+    '3': [{lim:180000,aliq:0.06,ded:0},{lim:360000,aliq:0.112,ded:9360},{lim:720000,aliq:0.135,ded:17640},{lim:1800000,aliq:0.16,ded:35640},{lim:3600000,aliq:0.21,ded:125640},{lim:4800000,aliq:0.33,ded:648000}]
+  };
+  const tbl = tables[String(anexo)] || tables['3'];
+  let aliq = tbl[tbl.length-1].aliq, ded = tbl[tbl.length-1].ded;
+  for (const row of tbl) {
+    if (faturamentoAnual <= row.lim) { aliq = row.aliq; ded = row.ded; break; }
+  }
+  return (faturamentoAnual * aliq - ded) / 12;
+}
+
+// ════════════════════════════════════════════════════
+//  PRE-MONEY CALCULATION
+// ════════════════════════════════════════════════════
+function calcPreMoney() {
+  const receita = buildReceita();
+  const dadm = buildDespesas('dadm');
+  const dger = buildDespesas('dger');
+  const dven = buildDespesas('dven');
+  const dhc = buildDespesas('dhc');
+
+  const ebitda = [];
+  const resultado = [];
+  const regime = state.regimeSelected;
+  const anexo = parseInt(document.getElementById('anexoSimples').value);
+  const aliqP = parseInt(document.getElementById('aliqPresumido').value);
+
+  for (let j = 0; j < 60; j++) {
+    const eb = receita[j] - dadm[j] - dger[j] - dven[j] - dhc[j];
+    ebitda.push(eb);
+    const yearIdx = Math.floor(j / 12);
+    const fatAnual = receita.slice(yearIdx * 12, yearIdx * 12 + 12).reduce((a, b) => a + b, 0);
+    const ebAnual = ebitda.slice(yearIdx * 12, yearIdx * 12 + 12).reduce((a, b) => a + b, 0);
+    const imp = calcImposto(fatAnual, ebAnual, regime, anexo, aliqP) / 12;
+    resultado.push(eb - imp);
+  }
+
+  state.receita = receita;
+  state.ebitda = ebitda;
+
+  // WACC
+  let wacc, waccConst;
+  if (state.waccType === 'constante') {
+    wacc = v('waccConst');
+    waccConst = true;
+  } else {
+    wacc = [v('wacc1'),v('wacc2'),v('wacc3'),v('wacc4'),v('wacc5')];
+    waccConst = false;
+  }
+  const g = v('taxaG');
+
+  // DCF Pre-money
+  state.valPre = calcDCF([resultado], 1, waccConst, wacc, g)[0];
+
+  // Display
+  document.getElementById('valPre').textContent = fmtBRL(state.valPre);
+
+  // Summary stats of receita
+  const sorted = [...receita].sort((a,b) => a-b);
+  const ssData = [
+    {label:'Mínimo', val: fmtBRL(Math.min(...receita))},
+    {label:'Média', val: fmtBRL(receita.reduce((a,b)=>a+b,0)/receita.length)},
+    {label:'Máximo', val: fmtBRL(Math.max(...receita))},
+    {label:'Percentil 25%', val: fmtBRL(percentile(receita,25))},
+    {label:'Mediana', val: fmtBRL(percentile(receita,50))},
+    {label:'Percentil 75%', val: fmtBRL(percentile(receita,75))},
+    {label:'Percentil 90%', val: fmtBRL(percentile(receita,90))},
+    {label:'Total 5 anos', val: fmtBRL(receita.reduce((a,b)=>a+b,0))}
+  ];
+
+  const grid = document.getElementById('ssGrid');
+  grid.innerHTML = ssData.map(d => `
+    <div class="ss-card">
+      <div class="ss-label">${d.label}</div>
+      <div class="ss-value">${d.val}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('pre-money-result').style.display = 'block';
+}
+
+// ════════════════════════════════════════════════════
+//  DCF VALUATION ENGINE
+// ════════════════════════════════════════════════════
+function calcDCF(resultados, nSim, waccConst, wacc, g) {
+  const valuations = [];
+  for (let i = 0; i < nSim; i++) {
+    let temp = 0;
+    const res = resultados[i];
+
+    for (let j = 0; j < 60; j++) {
+      let w;
+      if (waccConst) w = wacc;
+      else {
+        const yr = Math.min(Math.floor(j / 12), 4);
+        w = wacc[yr];
+      }
+      const wm = Math.pow(1 + w, 1/12) - 1;
+      temp += res[j] / Math.pow(1 + wm, j + 1);
+    }
+
+    // Perpetuity
+    const wLast = waccConst ? wacc : wacc[4];
+    const wm = Math.pow(1 + wLast, 1/12) - 1;
+    const gm = Math.pow(1 + g, 1/12) - 1;
+    const fator = 1 / Math.pow(1 + wm, 59);
+    const lastCF = res[59] || 0;
+    const perp = (wm - gm) > 0 ? lastCF / (wm - gm) * fator : 0;
+    valuations.push(temp + perp);
+  }
+  return valuations;
+}
+
+// ════════════════════════════════════════════════════
+//  VC VALUATION ENGINE
+// ════════════════════════════════════════════════════
+function calcVC(ebitdas, nSim, targetReturn, multEbitda) {
+  return ebitdas.map(eb => {
+    const ebitdaFinal = eb[59];
+    return ebitdaFinal * multEbitda / (Math.pow(1 + targetReturn, 5) - 1);
+  });
+}
+
+// ════════════════════════════════════════════════════
+//  GENERATE SIMULATED REVENUES (Monte Carlo)
+// ════════════════════════════════════════════════════
+function generateRevenueScenario(distribSelected) {
+  const baseReceita = buildReceita();
+  const mean = baseReceita.reduce((a,b)=>a+b,0) / baseReceita.length;
+  const std = mean * 0.35; // 35% CoV
+
+  return baseReceita.map((base, j) => {
+    let sampled;
+    switch (distribSelected) {
+      case 'Normal':
+        sampled = base + std * randn();
+        break;
+      case 't-Student':
+        // t(5 df) via ratio normal/chi
+        const n1 = randn(), n2 = randn(), n3 = randn(), n4 = randn(), n5 = randn();
+        const chi = Math.sqrt((n1*n1+n2*n2+n3*n3+n4*n4+n5*n5)/5);
+        sampled = base + (std * randn() / chi);
+        break;
+      case 'Triangular':
+        // Triangular [0.5*base, 1.5*base]
+        const U = Math.random();
+        sampled = base * 0.5 + (1.5*base - 0.5*base) * Math.sqrt(U);
+        break;
+      case 'Uniforme':
+        sampled = base * 0.5 + Math.random() * base;
+        break;
+      case 'LogNormal':
+        const sigma = 0.3;
+        const mu = Math.log(Math.max(base,1)) - sigma*sigma/2;
+        sampled = lognorm(mu, sigma);
+        break;
+      case 'Linear': {
+        const recMax = v('linMax');
+        const linFactors = [v('lin1'),v('lin2'),v('lin3'),v('lin4'),v('lin5')];
+        const yr = Math.floor(j/12);
+        sampled = recMax * linFactors[yr] * (0.8 + Math.random() * 0.4);
+        break;
+      }
+      default: // Sistema
+        sampled = base * (0.7 + Math.random() * 0.6);
+    }
+    return Math.max(sampled, 0);
+  });
+}
+
+// ════════════════════════════════════════════════════
+//  MAIN SIMULATION
+// ════════════════════════════════════════════════════
+async function runSimulation() {
+  const btn = document.getElementById('runSimBtn');
+  const prog = document.getElementById('simProgress');
+  btn.disabled = true;
+  prog.classList.add('visible');
+
+  const nSim = parseInt(document.getElementById('nSim').value);
+  const regime = state.regimeSelected;
+  const anexo = parseInt(document.getElementById('anexoSimples').value);
+  const aliqP = parseInt(document.getElementById('aliqPresumido').value);
+  const g = v('taxaG');
+  const targetReturn = v('retAlvo');
+  const multEbitda = v('multEbitda');
+  const probSucesso = v('probSucesso');
+  const breakeven = parseInt(document.getElementById('breakeven').value);
+  const partMin = v('partMin');
+
+  let wacc, waccConst;
+  if (state.waccType === 'constante') {
+    wacc = v('waccConst'); waccConst = true;
+  } else {
+    wacc = [v('wacc1'),v('wacc2'),v('wacc3'),v('wacc4'),v('wacc5')];
+    waccConst = false;
+  }
+
+  // Ensure pre-money exists
+  if (!state.valPre) calcPreMoney();
+  const valPre = state.valPre;
+
+  // Run in chunks to allow UI update
+  const chunkSize = 50;
+  const allDCF = [], allVC = [], allBreakevens = [];
+
+  for (let start = 0; start < nSim; start += chunkSize) {
+    const end = Math.min(start + chunkSize, nSim);
+
+    for (let i = start; i < end; i++) {
+      if (Math.random() > probSucesso) { allDCF.push(0); allVC.push(0); allBreakevens.push(null); continue; }
+
+      const recSim = generateRevenueScenario(state.distribSelected);
+      const dadm = buildDespesas('dadm');
+      const dger = buildDespesas('dger');
+      const dven = buildDespesas('dven');
+      const dhc = buildDespesas('dhc');
+
+      const ebitdaSim = recSim.map((r,j) => r - dadm[j] - dger[j] - dven[j] - dhc[j]);
+      const resultSim = ebitdaSim.map((eb, j) => {
+        const yr = Math.floor(j/12);
+        const fatAnual = recSim.slice(yr*12, yr*12+12).reduce((a,b)=>a+b,0);
+        const ebAnual = ebitdaSim.slice(yr*12, yr*12+12).reduce((a,b)=>a+b,0);
+        const imp = calcImposto(fatAnual, ebAnual, regime, anexo, aliqP) / 12;
+        return eb - imp;
+      });
+
+      const dcfVals = calcDCF([resultSim], 1, waccConst, wacc, g);
+      allDCF.push(dcfVals[0]);
+
+      const vcVal = ebitdaSim[59] * multEbitda / (Math.pow(1 + targetReturn, 5) - 1);
+      allVC.push(vcVal);
+
+      // breakeven
+      let cumCF = 0, be = null;
+      for (let j = 0; j < 60; j++) { cumCF += resultSim[j]; if (cumCF >= 0 && be === null) { be = j+1; break; } }
+      allBreakevens.push(be);
+    }
+
+    // Update progress
+    const pct = Math.round((end / nSim) * 100);
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent = end + ' / ' + nSim + ' cenários';
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  // Post-money computations
+  const filterPositive = arr => arr.filter(x => x > 0 && isFinite(x));
+  const dcfPos = filterPositive(allDCF);
+  const vcPos = filterPositive(allVC);
+
+  // Post-money = pre + aporte (usando mediana DCF como base)
+  const medDCF = percentile(dcfPos, 50);
+  const medVC = percentile(vcPos, 50);
+
+  const beValid = allBreakevens.filter(b => b !== null);
+  const beMedian = beValid.length ? percentile(beValid, 50) : null;
+  const probBE = beValid.length / nSim;
+
+  // Metrics
+  const valPostMinimo = valPre * (1 + partMin);
+  const probSuperior = allDCF.filter(x => x > valPostMinimo).length / nSim;
+  const aporteMin = valPre * partMin;
+  const multPost = medDCF > 0 ? (medDCF / valPre) : 0;
+
+  state.results = {
+    allDCF: dcfPos, allVC: vcPos, nSim,
+    statsDCF: calcStats(dcfPos),
+    statsVC: calcStats(vcPos),
+    valPre, aporteMin, partMin, multPost,
+    valPostMinimo, probSuperior, probBE,
+    beMedian
+  };
+
+  prog.classList.remove('visible');
+  btn.disabled = false;
+
+  renderResults();
+  goToStep(3);
+}
+
+function calcStats(arr) {
+  if (!arr.length) return {};
+  return {
+    min: Math.min(...arr),
+    p5: percentile(arr, 5),
+    p25: percentile(arr, 25),
+    mean: arr.reduce((a,b)=>a+b,0)/arr.length,
+    p50: percentile(arr, 50),
+    p75: percentile(arr, 75),
+    p90: percentile(arr, 90),
+    max: Math.max(...arr)
+  };
+}
+
+// ════════════════════════════════════════════════════
+//  RENDER RESULTS
+// ════════════════════════════════════════════════════
+function renderResults() {
+  const R = state.results;
+  const { statsDCF, statsVC } = R;
+
+  document.getElementById('nSimLabel').textContent = R.nSim.toLocaleString('pt-BR');
+
+  // Top metrics
+  document.getElementById('res-pre').textContent = fmtBRL(R.valPre);
+  document.getElementById('res-post-dcf-med').textContent = fmtBRL(statsDCF.p50 || 0);
+  document.getElementById('res-post-vc-med').textContent = fmtBRL(statsVC.p50 || 0);
+  document.getElementById('res-aporte').textContent = fmtBRL(R.aporteMin);
+
+  // Stats tables
+  const renderStatsTable = (id, stats, color) => {
+    const rows = [
+      {key: 'Mínimo', val: stats.min},
+      {key: 'Percentil 5%', val: stats.p5},
+      {key: 'Percentil 25%', val: stats.p25},
+      {key: 'Média', val: stats.mean, highlight: true},
+      {key: 'Mediana (P50)', val: stats.p50, highlight: true},
+      {key: 'Percentil 75%', val: stats.p75},
+      {key: 'Percentil 90%', val: stats.p90},
+      {key: 'Máximo', val: stats.max}
+    ];
+    document.getElementById(id).innerHTML = rows.map(r => `
+      <div class="stats-row-item">
+        <span class="key">${r.key}</span>
+        <span class="val ${r.highlight ? 'highlight' : ''}">${fmtBRL(r.val || 0)}</span>
+      </div>
+    `).join('');
+  };
+
+  renderStatsTable('statsDCF', statsDCF);
+  renderStatsTable('statsVC', statsVC);
+
+  // Métricas de interesse
+  const metricas = [
+    {label: 'Valuation Pre-Money', val: fmtBRL(R.valPre), color: 'var(--accent)'},
+    {label: 'Aporte Mínimo', val: fmtBRL(R.aporteMin), color: 'var(--gold)'},
+    {label: 'Participação Mínima', val: fmtPct(R.partMin), color: 'var(--accent2)'},
+    {label: 'Múltiplo Valuation Post/Pre', val: fmtX(R.multPost), color: 'var(--accent3)'},
+    {label: 'Valuation Post Mínimo', val: fmtBRL(R.valPostMinimo), color: 'var(--text)'},
+    {label: 'P(Val > Val Post Mín)', val: fmtPct(R.probSuperior), color: R.probSuperior > 0.5 ? 'var(--accent)' : 'var(--danger)'},
+    {label: 'P(Breakeven Esperado)', val: fmtPct(R.probBE), color: R.probBE > 0.6 ? 'var(--accent)' : 'var(--warn)'},
+    {label: 'Breakeven Mediano', val: R.beMedian ? R.beMedian.toFixed(0) + ' meses' : 'N/A', color: 'var(--text2)'}
+  ];
+
+  document.getElementById('metricasGrid').innerHTML = metricas.map(m => `
+    <div class="metric-card" style="border-top: 2px solid ${m.color};">
+      <div class="metric-label">${m.label}</div>
+      <div class="metric-value" style="color:${m.color}; font-size:22px;">${m.val}</div>
+    </div>
+  `).join('');
+
+  // Charts
+  renderChartDCF(R.allDCF);
+  renderChartVC(R.allVC);
+  renderCashflowChart();
+}
+
+function makeHistogram(data, bins = 25) {
+  if (!data.length) return { labels: [], counts: [], density: [] };
+  const min = Math.min(...data), max = Math.max(...data);
+  const width = (max - min) / bins;
+  const counts = new Array(bins).fill(0);
+  const labels = [];
+  for (let i = 0; i < bins; i++) labels.push(fmtBRL(min + i * width));
+  for (const val of data) {
+    const idx = Math.min(Math.floor((val - min) / width), bins - 1);
+    counts[idx]++;
+  }
+  const total = data.length;
+  const density = counts.map(c => c / total / width * 1e6);
+  return { labels, counts, density };
+}
+
+let chartDCFInst, chartVCInst, chartCFInst;
+
+function renderChartDCF(data) {
+  if (chartDCFInst) chartDCFInst.destroy();
+  const { labels, counts, density } = makeHistogram(data);
+  const ctx = document.getElementById('chartDCF').getContext('2d');
+  chartDCFInst = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        { type: 'bar', label: 'Frequência', data: counts, backgroundColor: 'rgba(0,149,255,0.3)', borderColor: 'rgba(0,149,255,0.7)', borderWidth: 1, yAxisID: 'y1' },
+        { type: 'line', label: 'Densidade', data: density, borderColor: '#00e5a0', borderWidth: 2, pointRadius: 0, tension: 0.4, yAxisID: 'y2', fill: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { labels: { color: '#8a97a8', font: { family: 'Outfit', size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#4a5568', maxTicksLimit: 6, font: { family: 'DM Mono', size: 10 } }, grid: { color: '#1e242c' } },
+        y1: { position: 'left', ticks: { color: '#4a5568', font: { family: 'DM Mono', size: 10 } }, grid: { color: '#1e242c' } },
+        y2: { position: 'right', ticks: { color: '#4a5568', font: { family: 'DM Mono', size: 10 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderChartVC(data) {
+  if (chartVCInst) chartVCInst.destroy();
+  const { labels, counts, density } = makeHistogram(data);
+  const ctx = document.getElementById('chartVC').getContext('2d');
+  chartVCInst = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        { type: 'bar', label: 'Frequência', data: counts, backgroundColor: 'rgba(255,107,53,0.3)', borderColor: 'rgba(255,107,53,0.7)', borderWidth: 1, yAxisID: 'y1' },
+        { type: 'line', label: 'Densidade', data: density, borderColor: '#f7b731', borderWidth: 2, pointRadius: 0, tension: 0.4, yAxisID: 'y2', fill: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { labels: { color: '#8a97a8', font: { family: 'Outfit', size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#4a5568', maxTicksLimit: 6, font: { family: 'DM Mono', size: 10 } }, grid: { color: '#1e242c' } },
+        y1: { position: 'left', ticks: { color: '#4a5568', font: { family: 'DM Mono', size: 10 } }, grid: { color: '#1e242c' } },
+        y2: { position: 'right', ticks: { color: '#4a5568', font: { family: 'DM Mono', size: 10 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderCashflowChart() {
+  if (chartCFInst) chartCFInst.destroy();
+  const labels = Array.from({length:60}, (_,i) => `M${i+1}`);
+  const ctx = document.getElementById('chartCashflow').getContext('2d');
+  chartCFInst = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Receita', data: state.receita, borderColor: '#00e5a0', borderWidth: 2, pointRadius: 0, fill: true, backgroundColor: 'rgba(0,229,160,0.05)', tension: 0.4 },
+        { label: 'EBITDA', data: state.ebitda, borderColor: '#0095ff', borderWidth: 2, pointRadius: 0, fill: true, backgroundColor: 'rgba(0,149,255,0.05)', tension: 0.4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { labels: { color: '#8a97a8', font: { family: 'Outfit', size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#4a5568', maxTicksLimit: 12, font: { family: 'DM Mono', size: 10 } }, grid: { color: '#1e242c' } },
+        y: { ticks: { color: '#4a5568', font: { family: 'DM Mono', size: 10 }, callback: v => fmtBRL(v) }, grid: { color: '#1e242c' } }
+      }
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════
+//  EXPORT
+// ════════════════════════════════════════════════════
+function exportResults() {
+  if (!state.results) return;
+  const R = state.results;
+  const { statsDCF, statsVC } = R;
+
+  const lines = [
+    'STARTUPVALUE — RELATÓRIO DE VALUATION',
+    '=======================================',
+    `Data: ${new Date().toLocaleDateString('pt-BR')}`,
+    '',
+    'VALUATION PRÉ-MONEY',
+    `Valuation Pre-Money (DCF): ${fmtBRL(R.valPre)}`,
+    '',
+    'VALUATION DCF — MONTE CARLO',
+    `Mínimo:        ${fmtBRL(statsDCF.min)}`,
+    `Percentil 5%:  ${fmtBRL(statsDCF.p5)}`,
+    `Percentil 25%: ${fmtBRL(statsDCF.p25)}`,
+    `Média:         ${fmtBRL(statsDCF.mean)}`,
+    `Mediana:       ${fmtBRL(statsDCF.p50)}`,
+    `Percentil 75%: ${fmtBRL(statsDCF.p75)}`,
+    `Percentil 90%: ${fmtBRL(statsDCF.p90)}`,
+    `Máximo:        ${fmtBRL(statsDCF.max)}`,
+    '',
+    'VALUATION VC METHOD — MONTE CARLO',
+    `Mínimo:        ${fmtBRL(statsVC.min)}`,
+    `Mediana:       ${fmtBRL(statsVC.p50)}`,
+    `Máximo:        ${fmtBRL(statsVC.max)}`,
+    '',
+    'MÉTRICAS DE INTERESSE',
+    `Aporte Mínimo:              ${fmtBRL(R.aporteMin)}`,
+    `Participação Mínima:        ${fmtPct(R.partMin)}`,
+    `Múltiplo Post/Pre:          ${fmtX(R.multPost)}`,
+    `Prob(Val > Val Post Min):   ${fmtPct(R.probSuperior)}`,
+    `Prob(Breakeven Esperado):   ${fmtPct(R.probBE)}`,
+    `Breakeven Mediano:          ${R.beMedian ? R.beMedian.toFixed(0) + ' meses' : 'N/A'}`
+  ];
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'startupvalue_relatorio.txt';
+  a.click(); URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+"""Workspace-scoped persistence operations."""

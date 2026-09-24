@@ -1,0 +1,36 @@
+.emptyState {
+  padding: 42px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.emptyState > span {
+  color: var(--green);
+  font: 9px var(--mono);
+  letter-spacing: .12em;
+}
+
+.emptyState h1,
+.emptyState h3 {
+  margin: 10px 0;
+  font-size: 25px;
+}
+
+.emptyState p,
+.secondary {
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.emptyState :global(.button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+@media (max-width: 760px) {
+  .emptyState { padding: 26px 20px; }
+}

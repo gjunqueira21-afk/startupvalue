@@ -1,0 +1,226 @@
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy import select
+
+from app.api.dependencies import Actor, Database
+from app.api.schemas import (
+    ConditionalStatisticsResponse,
+    DecisionResponse,
+    DriverResponse,
+    SimulationCreateRequest,
+    SimulationResponse,
+    SimulationRunRequest,
+    SimulationSummary,
+    TargetComparisonResponse,
+    TargetResponse,
+)
+from app.db.models import Role, Simulation, SimulationResult, SimulationSamples
+from app.decision.drivers import spearman_drivers
+from app.decision.targets import analyze_target
+from app.repositories.resources import get_revision, get_simulation
+from app.services.audit import record_event
+from app.services.simulation import execute_synchronously, load_sample_vectors
+
+router = APIRouter(prefix="/api/v1", tags=["simulations"])
+
+
+def _response(simulation: Simulation, result: SimulationResult | None) -> SimulationResponse:
+    return SimulationResponse(
+        simulation_id=simulation.id,
+        scenario_revision_id=simulation.scenario_revision_id,
+        model_version=simulation.model_version,
+        tax_version=simulation.tax_version,
+        seed=simulation.seed,
+        simulation_count=simulation.simulation_count,
+        status=simulation.status.value,
+        summary=SimulationSummary.model_validate(result.summary) if result else None,
+        result_hash=result.result_hash if result else None,
+        created_at=simulation.created_at,
+    )
+
+
+@router.post(
+    "/scenario-revisions/{revision_id}/simulations",
+    response_model=SimulationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def run_simulation(
+    revision_id: str, payload: SimulationRunRequest, db: Database, actor: Actor
+) -> SimulationResponse:
+    return _run(revision_id, payload, db, actor)
+
+
+@router.post(
+    "/simulations",
+    response_model=SimulationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_simulation(
+    payload: SimulationCreateRequest, db: Database, actor: Actor
+) -> SimulationResponse:
+    request = SimulationRunRequest.model_validate(
+        payload.model_dump(exclude={"scenario_revision_id"})
+    )
+    return _run(payload.scenario_revision_id, request, db, actor)
+
+
+def _run(
+    revision_id: str, payload: SimulationRunRequest, db: Database, actor: Actor
+) -> SimulationResponse:
+    if actor.role not in {Role.owner, Role.admin, Role.analyst}:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "action_not_allowed")
+    revision = get_revision(db, revision_id=revision_id, workspace_id=actor.workspace_id)
+    if revision is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "scenario_revision_not_found")
+    try:
+        simulation, result = execute_synchronously(
+            db,
+            workspace_id=actor.workspace_id,
+            revision_id=revision.id,
+            canonical_inputs=revision.canonical_inputs,
+            request=payload,
+        )
+    except (ValueError, RuntimeError) as exc:
+        db.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    record_event(
+        db,
+        action="simulation.succeeded",
+        resource_type="simulation",
+        workspace_id=actor.workspace_id,
+        actor_id=actor.user_id,
+        resource_id=simulation.id,
+        metadata={
+            "model_version": simulation.model_version,
+            "seed": simulation.seed,
+            "simulation_count": simulation.simulation_count,
+        },
+    )
+    db.commit()
+    db.refresh(simulation)
+    db.refresh(result)
+    return _response(simulation, result)
+
+
+@router.get("/simulations/{simulation_id}", response_model=SimulationResponse)
+def read_simulation(simulation_id: str, db: Database, actor: Actor) -> SimulationResponse:
+    simulation = get_simulation(
+        db, simulation_id=simulation_id, workspace_id=actor.workspace_id
+    )
+    if simulation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "simulation_not_found")
+    result = db.scalar(
+        select(SimulationResult).where(
+            SimulationResult.workspace_id == actor.workspace_id,
+            SimulationResult.simulation_id == simulation.id,
+        )
+    )
+    return _response(simulation, result)
+
+
+def _decision_source(
+    simulation_id: str, db: Database, actor: Actor
+) -> tuple[Simulation, SimulationResult, SimulationSamples]:
+    simulation = get_simulation(db, simulation_id=simulation_id, workspace_id=actor.workspace_id)
+    if simulation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "simulation_not_found")
+    result = db.scalar(
+        select(SimulationResult).where(
+            SimulationResult.workspace_id == actor.workspace_id,
+            SimulationResult.simulation_id == simulation.id,
+        )
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "simulation_result_unavailable")
+    snapshot = db.scalar(
+        select(SimulationSamples).where(
+            SimulationSamples.workspace_id == actor.workspace_id,
+            SimulationSamples.simulation_result_id == result.id,
+        )
+    )
+    if snapshot is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "simulation_samples_unavailable")
+    return simulation, result, snapshot
+
+
+@router.get("/simulations/{simulation_id}/decision", response_model=DecisionResponse)
+def read_decision(simulation_id: str, db: Database, actor: Actor) -> DecisionResponse:
+    simulation, result, snapshot = _decision_source(simulation_id, db, actor)
+    try:
+        valuations, factors = load_sample_vectors(snapshot, result=result, simulation=simulation)
+        drivers = spearman_drivers(factors, valuations)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "simulation_samples_integrity_error"
+        ) from exc
+    return DecisionResponse(
+        simulation_id=simulation.id,
+        result_hash=result.result_hash,
+        basis=str(result.summary["basis"]),
+        scenario_count=simulation.simulation_count,
+        drivers=[
+            DriverResponse(
+                name=item.name,
+                rho=item.rho,
+                direction=item.direction,
+                count=item.count,
+                status=item.status,
+                population=item.population,
+            )
+            for item in drivers
+        ],
+    )
+
+
+@router.get("/simulations/{simulation_id}/target", response_model=TargetResponse)
+def read_target(
+    simulation_id: str,
+    db: Database,
+    actor: Actor,
+    value: Annotated[float, Query(allow_inf_nan=False)],
+) -> TargetResponse:
+    simulation, result, snapshot = _decision_source(simulation_id, db, actor)
+    try:
+        valuations, factors = load_sample_vectors(snapshot, result=result, simulation=simulation)
+        target = analyze_target(valuations, value, factors)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "simulation_samples_integrity_error"
+        ) from exc
+    return TargetResponse(
+        simulation_id=simulation.id,
+        result_hash=result.result_hash,
+        basis=str(result.summary["basis"]),
+        target=target.target,
+        scenario_count=target.scenario_count,
+        hit_count=target.hit_count,
+        miss_count=target.miss_count,
+        probability=target.probability,
+        wilson95_low=target.wilson95_low,
+        wilson95_high=target.wilson95_high,
+        comparisons=[
+            TargetComparisonResponse(
+                name=item.name,
+                hit=ConditionalStatisticsResponse(
+                    count=item.hit.count,
+                    p25=item.hit.p25,
+                    p50=item.hit.p50,
+                    p75=item.hit.p75,
+                    reason=item.hit.reason,
+                ),
+                miss=ConditionalStatisticsResponse(
+                    count=item.miss.count,
+                    p25=item.miss.p25,
+                    p50=item.miss.p50,
+                    p75=item.miss.p75,
+                    reason=item.miss.reason,
+                ),
+                median_difference_hit_minus_miss=item.median_difference_hit_minus_miss,
+                status=item.status,
+            )
+            for item in target.comparisons
+        ],
+    )

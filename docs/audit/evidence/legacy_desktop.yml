@@ -1,0 +1,124 @@
+- generic [active] [ref=e1] [box=0,0,1280,1659]:
+  - banner [ref=e2] [box=0,0,1280,64]:
+    - generic [ref=e3] [box=40,14,155,36]:
+      - generic [ref=e4] [box=40,14,36,36]: S
+      - generic [ref=e5] [box=88,18,107,28]: StartupValue
+    - generic [ref=e6] [box=1066,20,174,24]: Valuation Engine v2.0
+  - generic [ref=e7] [box=0,64,1280,57]:
+    - button "1 Dados Financeiros" [ref=e8] [cursor=pointer] [box=40,64,192,56]:
+      - generic [ref=e9] [box=64,80,22,22]: "1"
+      - text: Dados Financeiros
+    - button "2 Configurar Simulação" [ref=e10] [cursor=pointer] [box=232,64,212,56]:
+      - generic [ref=e11] [box=256,80,22,22]: "2"
+      - text: Configurar Simulação
+    - button "3 Resultados" [ref=e12] [cursor=pointer] [box=444,64,146,56]:
+      - generic [ref=e13] [box=468,80,22,22]: "3"
+      - text: Resultados
+  - main [ref=e14] [box=40,121,1200,1538]:
+    - generic [ref=e15] [box=80,161,1120,1458]:
+      - heading "Dados Financeiros" [level=1] [ref=e16] [box=80,161,1120,38]
+      - paragraph [ref=e17] [box=80,205,1120,18]: Insira as projeções de receita e despesas para os próximos 5 anos (valores mensais em R$)
+      - generic [ref=e18] [box=80,255,1120,43]:
+        - generic [ref=e19] [box=97,268,18,17]: 💡
+        - generic [ref=e20] [box=123,268,838,16]: Os dados são projetados mensalmente ao longo de 60 meses (5 anos). A receita será usada para calcular o fluxo de caixa e o valuation pré-money.
+      - generic [ref=e21] [box=80,318,1120,230]:
+        - generic [ref=e22] [box=109,347,1062,14]: Receita — Projeção Anual
+        - generic [ref=e23] [box=109,381,1062,138]:
+          - generic [ref=e24] [box=109,381,254,61]:
+            - generic [ref=e25] [box=109,381,254,15]: Receita Mensal — Ano 1 (R$)
+            - generic [ref=e26] [box=109,402,254,40]:
+              - spinbutton [ref=e27] [box=109,402,254,40]: "50000"
+              - generic [box=336,414,14,16]: R$
+          - generic [ref=e28] [box=379,381,254,61]:
+            - generic [ref=e29] [box=379,381,254,15]: Receita Mensal — Ano 2 (R$)
+            - generic [ref=e30] [box=379,402,254,40]:
+              - spinbutton [ref=e31] [box=379,402,254,40]: "90000"
+              - generic [box=606,414,14,16]: R$
+          - generic [ref=e32] [box=648,381,254,61]:
+            - generic [ref=e33] [box=648,381,254,15]: Receita Mensal — Ano 3 (R$)
+            - generic [ref=e34] [box=648,402,254,40]:
+              - spinbutton [ref=e35] [box=648,402,254,40]: "160000"
+              - generic [box=875,414,14,16]: R$
+          - generic [ref=e36] [box=918,381,254,61]:
+            - generic [ref=e37] [box=918,381,254,15]: Receita Mensal — Ano 4 (R$)
+            - generic [ref=e38] [box=918,402,254,40]:
+              - spinbutton [ref=e39] [box=918,402,254,40]: "260000"
+              - generic [box=1145,414,14,16]: R$
+          - generic [ref=e40] [box=109,458,254,61]:
+            - generic [ref=e41] [box=109,458,254,15]: Receita Mensal — Ano 5 (R$)
+            - generic [ref=e42] [box=109,479,254,40]:
+              - spinbutton [ref=e43] [box=109,479,254,40]: "400000"
+              - generic [box=336,491,14,16]: R$
+      - generic [ref=e44] [box=80,568,1120,230]:
+        - generic [ref=e45] [box=109,597,1062,14]: Despesas Administrativas — Média Mensal por Ano
+        - generic [ref=e46] [box=109,631,1062,138]:
+          - generic [ref=e47] [box=109,631,254,61]:
+            - generic [ref=e48] [box=109,631,254,15]: Ano 1 (R$/mês)
+            - spinbutton [ref=e49] [box=109,652,254,40]: "8000"
+          - generic [ref=e50] [box=379,631,254,61]:
+            - generic [ref=e51] [box=379,631,254,15]: Ano 2 (R$/mês)
+            - spinbutton [ref=e52] [box=379,652,254,40]: "12000"
+          - generic [ref=e53] [box=648,631,254,61]:
+            - generic [ref=e54] [box=648,631,254,15]: Ano 3 (R$/mês)
+            - spinbutton [ref=e55] [box=648,652,254,40]: "18000"
+          - generic [ref=e56] [box=918,631,254,61]:
+            - generic [ref=e57] [box=918,631,254,15]: Ano 4 (R$/mês)
+            - spinbutton [ref=e58] [box=918,652,254,40]: "26000"
+          - generic [ref=e59] [box=109,708,254,61]:
+            - generic [ref=e60] [box=109,708,254,15]: Ano 5 (R$/mês)
+            - spinbutton [ref=e61] [box=109,729,254,40]: "38000"
+      - generic [ref=e62] [box=80,818,1120,230]:
+        - generic [ref=e63] [box=109,847,1062,14]: Despesas Gerais — Média Mensal por Ano
+        - generic [ref=e64] [box=109,881,1062,138]:
+          - generic [ref=e65] [box=109,881,254,61]:
+            - generic [ref=e66] [box=109,881,254,15]: Ano 1 (R$/mês)
+            - spinbutton [ref=e67] [box=109,902,254,40]: "5000"
+          - generic [ref=e68] [box=379,881,254,61]:
+            - generic [ref=e69] [box=379,881,254,15]: Ano 2 (R$/mês)
+            - spinbutton [ref=e70] [box=379,902,254,40]: "8000"
+          - generic [ref=e71] [box=648,881,254,61]:
+            - generic [ref=e72] [box=648,881,254,15]: Ano 3 (R$/mês)
+            - spinbutton [ref=e73] [box=648,902,254,40]: "12000"
+          - generic [ref=e74] [box=918,881,254,61]:
+            - generic [ref=e75] [box=918,881,254,15]: Ano 4 (R$/mês)
+            - spinbutton [ref=e76] [box=918,902,254,40]: "18000"
+          - generic [ref=e77] [box=109,958,254,61]:
+            - generic [ref=e78] [box=109,958,254,15]: Ano 5 (R$/mês)
+            - spinbutton [ref=e79] [box=109,979,254,40]: "25000"
+      - generic [ref=e80] [box=80,1068,1120,230]:
+        - generic [ref=e81] [box=109,1097,1062,14]: Despesas de Vendas — Média Mensal por Ano
+        - generic [ref=e82] [box=109,1131,1062,138]:
+          - generic [ref=e83] [box=109,1131,254,61]:
+            - generic [ref=e84] [box=109,1131,254,15]: Ano 1 (R$/mês)
+            - spinbutton [ref=e85] [box=109,1152,254,40]: "4000"
+          - generic [ref=e86] [box=379,1131,254,61]:
+            - generic [ref=e87] [box=379,1131,254,15]: Ano 2 (R$/mês)
+            - spinbutton [ref=e88] [box=379,1152,254,40]: "7000"
+          - generic [ref=e89] [box=648,1131,254,61]:
+            - generic [ref=e90] [box=648,1131,254,15]: Ano 3 (R$/mês)
+            - spinbutton [ref=e91] [box=648,1152,254,40]: "12000"
+          - generic [ref=e92] [box=918,1131,254,61]:
+            - generic [ref=e93] [box=918,1131,254,15]: Ano 4 (R$/mês)
+            - spinbutton [ref=e94] [box=918,1152,254,40]: "19000"
+          - generic [ref=e95] [box=109,1208,254,61]:
+            - generic [ref=e96] [box=109,1208,254,15]: Ano 5 (R$/mês)
+            - spinbutton [ref=e97] [box=109,1229,254,40]: "28000"
+      - generic [ref=e98] [box=80,1318,1120,230]:
+        - generic [ref=e99] [box=109,1347,1062,14]: Despesas de Pessoal (Headcount) — Média Mensal por Ano
+        - generic [ref=e100] [box=109,1381,1062,138]:
+          - generic [ref=e101] [box=109,1381,254,61]:
+            - generic [ref=e102] [box=109,1381,254,15]: Ano 1 (R$/mês)
+            - spinbutton [ref=e103] [box=109,1402,254,40]: "15000"
+          - generic [ref=e104] [box=379,1381,254,61]:
+            - generic [ref=e105] [box=379,1381,254,15]: Ano 2 (R$/mês)
+            - spinbutton [ref=e106] [box=379,1402,254,40]: "28000"
+          - generic [ref=e107] [box=648,1381,254,61]:
+            - generic [ref=e108] [box=648,1381,254,15]: Ano 3 (R$/mês)
+            - spinbutton [ref=e109] [box=648,1402,254,40]: "50000"
+          - generic [ref=e110] [box=918,1381,254,61]:
+            - generic [ref=e111] [box=918,1381,254,15]: Ano 4 (R$/mês)
+            - spinbutton [ref=e112] [box=918,1402,254,40]: "80000"
+          - generic [ref=e113] [box=109,1458,254,61]:
+            - generic [ref=e114] [box=109,1458,254,15]: Ano 5 (R$/mês)
+            - spinbutton [ref=e115] [box=109,1479,254,40]: "120000"
+      - button "▶ Calcular Valuation Pré-Money" [ref=e117] [cursor=pointer] [box=80,1576,270,43]

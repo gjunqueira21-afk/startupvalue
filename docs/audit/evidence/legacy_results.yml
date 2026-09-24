@@ -1,0 +1,63 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]: S
+      - generic [ref=e5]: StartupValue
+    - generic [ref=e6]: Valuation Engine v2.0
+  - generic [ref=e7]:
+    - button "1 Dados Financeiros" [ref=e8] [cursor=pointer]:
+      - generic [ref=e9]: "1"
+      - text: Dados Financeiros
+    - button "2 Configurar Simulação" [ref=e10] [cursor=pointer]:
+      - generic [ref=e11]: "2"
+      - text: Configurar Simulação
+    - button "3 Resultados" [ref=e12] [cursor=pointer]:
+      - generic [ref=e13]: "3"
+      - text: Resultados
+  - main [ref=e14]:
+    - generic [ref=e244]:
+      - generic [ref=e245]:
+        - generic [ref=e246]:
+          - heading "Resultados do Valuation" [level=1] [ref=e247]
+          - paragraph [ref=e248]: Análise completa baseada em 1.000 cenários Monte Carlo
+        - button "← Reconfigurar" [ref=e249] [cursor=pointer]
+      - generic [ref=e250]:
+        - generic [ref=e251]:
+          - generic [ref=e252]: Valuation Pré-Money
+          - generic [ref=e253]: R$ 6.08M
+          - generic [ref=e254]: DCF Determinístico
+        - generic [ref=e255]:
+          - generic [ref=e256]: Valuation Post-Money (DCF Mediana)
+          - generic [ref=e257]: R$ 6.23M
+          - generic [ref=e258]: Percentil 50% Monte Carlo
+        - generic [ref=e259]:
+          - generic [ref=e260]: Valuation Post-Money (VC Mediana)
+          - generic [ref=e261]: R$ 557.6k
+          - generic [ref=e262]: Método VC — P50
+        - generic [ref=e263]:
+          - generic [ref=e264]: Aporte Mínimo
+          - generic [ref=e265]: R$ 912.0k
+          - generic [ref=e266]: Para participação mínima
+      - generic [ref=e267]:
+        - generic [ref=e268]: 🔵 Distribuição Valuation DCF
+        - generic [ref=e271]: 🟠 Distribuição Valuation VC
+      - generic [ref=e274]:
+        - generic [ref=e275]:
+          - generic [ref=e276]: 📊 Estatísticas — Valuation DCF
+          - generic [ref=e277]
+        - generic [ref=e302]:
+          - generic [ref=e303]: 📈 Estatísticas — Valuation VC
+          - generic [ref=e304]
+      - generic [ref=e329]:
+        - generic [ref=e330]: Métricas de Interesse para o Investidor
+        - generic [ref=e331]:
+          - generic [ref=e332]
+          - generic [ref=e335]
+          - generic [ref=e338]
+          - generic [ref=e341]
+          - generic [ref=e344]
+          - generic [ref=e347]
+          - generic [ref=e350]
+          - generic [ref=e353]
+      - generic [ref=e356]: 💰 Projeção EBITDA Pré-Money (Mensal)
+  - button "⬇ Exportar Relatório" [ref=e359] [cursor=pointer]
