@@ -14,7 +14,7 @@ from app.services.simulation import with_uncertainty
 
 from .schema import ReportData
 
-REPORT_TEMPLATE_VERSION = "1.1.0"
+REPORT_TEMPLATE_VERSION = "1.2.0"
 BASIS_LABELS = {"DCF equity value (signed)": "Equity via DCF · inclui valores negativos"}
 
 
@@ -25,6 +25,11 @@ def _profile_text(profile: dict[str, Any], key: str, limit: int) -> str | None:
     return value.strip()[:limit]
 
 
+def _number(value: float) -> str:
+    """pt-BR decimal with two places ("350.000,00"), matching the rest of the report."""
+    return f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+
 def _assumptions(inputs: dict[str, Any], currency: str) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     cash_flows = inputs.get("monthly_fcff")
@@ -33,7 +38,7 @@ def _assumptions(inputs: dict[str, Any], currency: str) -> list[dict[str, str]]:
             rows.append(
                 {
                     "name": f"FCFF projetado - mês {month}",
-                    "value": f"{float(amount):,.2f}",
+                    "value": _number(float(amount)),
                     "unit": currency,
                     "source": "Revisão do cenário",
                 }
@@ -50,7 +55,7 @@ def _assumptions(inputs: dict[str, Any], currency: str) -> list[dict[str, str]]:
         value = inputs.get(key)
         if value is None:
             continue
-        rendered = f"{float(value) * 100:.2f}" if percentage else f"{float(value):,.2f}"
+        rendered = _number(float(value) * 100 if percentage else float(value))
         rows.append(
             {"name": name, "value": rendered, "unit": unit, "source": "Revisão do cenário"}
         )

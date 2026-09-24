@@ -133,7 +133,21 @@ def test_report_pdf_uses_persisted_result_values_and_audit_metadata() -> None:
     reader = PdfReader(BytesIO(pdf_bytes))
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
 
-    assert len(reader.pages) >= 10
+    # Short sections share a page since the layout redesign: check structure, not page count.
+    assert len(reader.pages) >= 6
+    for heading in (
+        "Executive Summary",
+        "Company Overview",
+        "Financial Assumptions",
+        "Monte Carlo Distribution",
+        "DCF Analysis",
+        "Venture Capital Method",
+        "Valuation Drivers",
+        "What Needs to Be True?",
+        "Risk & Sensitivity",
+        "Methodology & Audit Trail",
+    ):
+        assert heading in text, heading
     assert "Árvore Analytics & Partners <Beta>" in text
     assert "R$ 8.400.000,00" in text
     assert "R$ 6.100.000,00 - R$ 11.700.000,00" in text
