@@ -23,10 +23,21 @@ class VariableSpec:
     label: str
     unit: Unit | None
     description: str
+    # Lower-case phrases describing a higher / lower value, used in insight text.
+    higher: str = ""
+    lower: str = ""
 
 
-def _spec(name: str, role: Role, label: str, unit: Unit, description: str) -> VariableSpec:
-    return VariableSpec(name, role, label, unit, description)
+def _spec(
+    name: str,
+    role: Role,
+    label: str,
+    unit: Unit,
+    description: str,
+    higher: str,
+    lower: str,
+) -> VariableSpec:
+    return VariableSpec(name, role, label, unit, description, higher, lower)
 
 
 CATALOG: dict[str, VariableSpec] = {
@@ -39,6 +50,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Receita vs. plano",
             "multiplier",
             "Choque multiplicativo médio da receita sobre a projeção-base (1,00x = plano).",
+            "receita acima do plano",
+            "receita abaixo do plano",
         ),
         _spec(
             "cost_factor_mean",
@@ -46,6 +59,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Custos operacionais vs. plano",
             "multiplier",
             "Choque multiplicativo médio do OPEX sobre a projeção-base (1,00x = plano).",
+            "custos operacionais acima do plano",
+            "custos operacionais abaixo do plano",
         ),
         _spec(
             "gross_margin_mean",
@@ -53,6 +68,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Margem bruta",
             "ratio",
             "Margem bruta média simulada nos 60 meses.",
+            "margem bruta maior",
+            "margem bruta menor",
         ),
         _spec(
             "failure_state",
@@ -60,6 +77,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Encerramento das operações",
             "binary",
             "1 quando o cenário encerra as operações dentro do horizonte.",
+            "mais encerramentos das operações",
+            "menos encerramentos das operações",
         ),
         _spec(
             "revenue_year5_operating",
@@ -67,6 +86,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Receita do Ano 5",
             "currency",
             "Receita dos meses 49-60 na trajetória operacional, antes de eventual encerramento.",
+            "receita do Ano 5 maior",
+            "receita do Ano 5 menor",
         ),
         _spec(
             "opex_year5_operating",
@@ -74,6 +95,8 @@ CATALOG: dict[str, VariableSpec] = {
             "OPEX do Ano 5",
             "currency",
             "OPEX dos meses 49-60 na trajetória operacional.",
+            "OPEX do Ano 5 maior",
+            "OPEX do Ano 5 menor",
         ),
         _spec(
             "ebitda_margin_year5_operating",
@@ -81,6 +104,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Margem EBITDA do Ano 5",
             "ratio",
             "(Lucro bruto - OPEX) / Receita no Ano 5; aproximação sem D&A explícita.",
+            "margem EBITDA maior",
+            "margem EBITDA menor",
         ),
         _spec(
             "revenue_cagr_operating",
@@ -88,6 +113,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Crescimento anual da receita (CAGR)",
             "ratio",
             "Taxa composta anual entre a receita do Ano 1 e a do Ano 5.",
+            "crescimento da receita maior",
+            "crescimento da receita menor",
         ),
         # Valuation parameters: drivers only when the user gives them a range.
         _spec(
@@ -96,6 +123,8 @@ CATALOG: dict[str, VariableSpec] = {
             "WACC",
             "ratio",
             "Custo médio ponderado de capital anual usado para descontar os fluxos.",
+            "WACC mais alto",
+            "WACC mais baixo",
         ),
         _spec(
             "terminal_growth",
@@ -103,6 +132,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Crescimento na perpetuidade (g)",
             "ratio",
             "Crescimento anual do fluxo normalizado após o Ano 5 (método de Gordon).",
+            "crescimento na perpetuidade maior",
+            "crescimento na perpetuidade menor",
         ),
         _spec(
             "exit_multiple",
@@ -110,6 +141,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Múltiplo de saída",
             "multiplier",
             "Múltiplo aplicado à receita ou ao EBITDA do Ano 5 para o valor terminal.",
+            "múltiplo de saída maior",
+            "múltiplo de saída menor",
         ),
         _spec(
             "failure_probability",
@@ -117,6 +150,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Probabilidade de encerramento",
             "ratio",
             "Premissa de probabilidade de encerramento no horizonte (usada no tornado).",
+            "probabilidade de encerramento maior",
+            "probabilidade de encerramento menor",
         ),
         # Simple (FCFF) model.
         _spec(
@@ -125,6 +160,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Fluxo de caixa vs. plano",
             "multiplier",
             "Choque multiplicativo médio do FCFF sobre a projeção-base.",
+            "fluxo de caixa acima do plano",
+            "fluxo de caixa abaixo do plano",
         ),
         # Structured snapshots written before v1.2 (read-only compatibility).
         _spec(
@@ -133,6 +170,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Receita realizada do Ano 5",
             "currency",
             "Receita realizada no Ano 5; zero após encerramento.",
+            "receita realizada do Ano 5 maior",
+            "receita realizada do Ano 5 menor",
         ),
         _spec(
             "opex_year5",
@@ -140,6 +179,8 @@ CATALOG: dict[str, VariableSpec] = {
             "OPEX realizado do Ano 5",
             "currency",
             "OPEX realizado no Ano 5; zero após encerramento.",
+            "OPEX realizado do Ano 5 maior",
+            "OPEX realizado do Ano 5 menor",
         ),
         _spec(
             "modeled_gross_margin_year5",
@@ -147,6 +188,8 @@ CATALOG: dict[str, VariableSpec] = {
             "Margem bruta (Ano 5)",
             "ratio",
             "Margem bruta simulada nos meses 49-60.",
+            "margem bruta maior",
+            "margem bruta menor",
         ),
     )
 }
@@ -156,7 +199,8 @@ def describe(name: str) -> VariableSpec:
     spec = CATALOG.get(name)
     if spec is not None:
         return spec
-    return VariableSpec(name, "outcome", name.replace("_", " "), None, "")
+    label = name.replace("_", " ")
+    return VariableSpec(name, "outcome", label, None, "", f"{label} maior", f"{label} menor")
 
 
 T = TypeVar("T")

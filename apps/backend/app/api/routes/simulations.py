@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -11,6 +12,7 @@ from app.api.schemas import (
     DecisionResponse,
     DriverRankingSummary,
     DriverResponse,
+    InsightResponse,
     SimulationCreateRequest,
     SimulationResponse,
     SimulationRunRequest,
@@ -21,9 +23,18 @@ from app.api.schemas import (
     TornadoResponse,
     TornadoSummary,
 )
-from app.db.models import Role, Simulation, SimulationResult, SimulationSamples
+from app.db.models import (
+    Role,
+    Scenario,
+    ScenarioRevision,
+    Simulation,
+    SimulationResult,
+    SimulationSamples,
+    Startup,
+)
 from app.decision.catalog import describe
 from app.decision.targets import analyze_target
+from app.insights.engine import build_insight
 from app.repositories.resources import get_revision, get_simulation
 from app.services.audit import record_event
 from app.services.simulation import (
@@ -208,6 +219,42 @@ def read_decision(simulation_id: str, db: Database, actor: Actor) -> DecisionRes
         )
         if tornado is not None
         else None,
+    )
+
+
+@router.get("/simulations/{simulation_id}/insight", response_model=InsightResponse)
+def read_insight(
+    simulation_id: str,
+    db: Database,
+    actor: Actor,
+    target: Annotated[float | None, Query(allow_inf_nan=False)] = None,
+) -> InsightResponse:
+    """Executive interpretation of the saved result; reads vectors, never resamples."""
+    simulation, result, snapshot = _decision_source(simulation_id, db, actor)
+    try:
+        valuations, factors = load_sample_vectors(snapshot, result=result, simulation=simulation)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "simulation_samples_integrity_error"
+        ) from exc
+    currency = db.scalar(
+        select(Startup.currency)
+        .join(Scenario, Scenario.startup_id == Startup.id)
+        .join(ScenarioRevision, ScenarioRevision.scenario_id == Scenario.id)
+        .where(
+            ScenarioRevision.id == simulation.scenario_revision_id,
+            Startup.workspace_id == actor.workspace_id,
+        )
+    )
+    report = build_insight(
+        summary=with_uncertainty(result.summary),
+        valuations=valuations,
+        factors=factors,
+        currency=currency or "BRL",
+        target=target,
+    )
+    return InsightResponse.model_validate(
+        {"simulation_id": simulation.id, "result_hash": result.result_hash, **asdict(report)}
     )
 
 

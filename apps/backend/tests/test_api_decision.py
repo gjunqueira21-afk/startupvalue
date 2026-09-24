@@ -150,6 +150,22 @@ def test_decision_reads_persisted_vectors_and_is_workspace_scoped(
     assert failure["unit"] == "binary"
     assert failure["role"] == "driver"
 
+    insight_response = owner.get(
+        f"/api/v1/simulations/{simulation_id}/insight", params={"target": p50}
+    )
+    assert insight_response.status_code == 200, insight_response.text
+    insight = insight_response.json()
+    assert insight["template_version"] == "insight-v1"
+    assert insight["result_hash"] == run["result_hash"]
+    assert insight["headline"].startswith("Valuation mediano de R$")
+    assert 1 <= len(insight["executive_summary"]) <= 3
+    assert insight["uncertainty"]["label"] == summary["uncertainty"]["label"]
+    assert insight["key_drivers"][0]["label"] == "Fluxo de caixa vs. plano"
+    assert insight["target"]["hit_count"] == target["hit_count"]
+    assert insight["target"]["disclaimer"].endswith("não relações de causa e efeito.")
+    without_target = owner.get(f"/api/v1/simulations/{simulation_id}/insight").json()
+    assert without_target["target"] is None
+
     _post(
         outsider,
         "/api/v1/auth/signup",
@@ -160,6 +176,7 @@ def test_decision_reads_persisted_vectors_and_is_workspace_scoped(
         },
     )
     assert outsider.get(f"/api/v1/simulations/{simulation_id}/decision").status_code == 404
+    assert outsider.get(f"/api/v1/simulations/{simulation_id}/insight").status_code == 404
     assert outsider.get(
         f"/api/v1/simulations/{simulation_id}/target", params={"value": p50}
     ).status_code == 404

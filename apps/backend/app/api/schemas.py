@@ -442,6 +442,74 @@ class TargetResponse(ApiModel):
     comparisons: list[TargetComparisonResponse]
 
 
+class UncertaintyInsightResponse(ApiModel):
+    label: Literal["LOW", "MODERATE", "HIGH", "VERY HIGH"]
+    label_pt: str
+    reason: str
+    sentence: str
+
+
+class DriverInsightResponse(ApiModel):
+    name: str
+    label: str
+    contribution: float
+    direction: str | None
+
+
+class TailInsightResponse(ApiModel):
+    name: str
+    label: str
+    kind: Literal["continuous", "binary"]
+    direction: Literal["higher", "lower"]
+    text: str
+
+
+class ConditionInsightResponse(ApiModel):
+    name: str
+    label: str
+    unit: VariableUnit | None
+    kind: Literal["continuous", "binary"]
+    direction: Literal["higher", "lower"]
+    hit_value: float
+    miss_value: float
+    cliffs_delta: float
+    threshold: float | None
+
+
+class TargetInsightResponse(ApiModel):
+    target: float
+    probability: float
+    hit_count: int
+    scenario_count: int
+    wilson95_low: float
+    wilson95_high: float
+    sample_note: Literal["ok", "small_group", "insufficient", "empty_group"]
+    headline: str
+    probability_sentence: str
+    interpretation: str
+    statements: list[str]
+    conditions: list[ConditionInsightResponse]
+    disclaimer: str
+
+
+class InsightResponse(ApiModel):
+    simulation_id: str
+    result_hash: str
+    template_version: str
+    headline: str
+    valuation_paragraphs: list[str]
+    uncertainty: UncertaintyInsightResponse
+    key_drivers_sentence: str | None
+    key_drivers: list[DriverInsightResponse]
+    upside: list[TailInsightResponse]
+    downside: list[TailInsightResponse]
+    sensitivity_sentence: str | None
+    risks: list[str]
+    target: TargetInsightResponse | None
+    executive_summary: list[str]
+    method_notes: list[str]
+
+
 class SimulationResponse(ApiModel):
     simulation_id: str
     scenario_revision_id: str

@@ -200,3 +200,49 @@ Restrições verificadas no contrato, antes de qualquer sorteio:
 - Níveis: com faixa, P10 e P90 exatos da distribuição informada (`distribution_p10_p90`); sem faixa, base ± delta (`base_plus_minus_delta`). Os deltas padrão (configuráveis em `tornado`) são ±3 p.p. de WACC, ±1 p.p. de g, ±25% do múltiplo e ±10 p.p. de probabilidade de encerramento.
 - Níveis que violariam o modelo são ajustados e marcados com `clamped=true`: WACC fica pelo menos 0,5 p.p. acima do maior g, g fica pelo menos 0,5 p.p. abaixo do menor WACC, e as probabilidades ficam em [0, 1].
 - Barras ordenadas pelo *swing* |P50(alto) − P50(baixo)|. O tornado não atribui probabilidade aos níveis nem captura interações entre parâmetros.
+
+## 16. Insight executivo e What Needs To Be True (`insight-v1`)
+
+`GET /api/v1/simulations/{id}/insight[?target=T]` devolve a interpretação executiva de um resultado salvo (`app/insights/`). O motor lê o `SimulationResult` e o snapshot verificado; não reamostra nada e não usa modelo de linguagem. Cada frase é um template preenchido por números calculados ou persistidos. O mesmo conteúdo alimenta o dashboard e o PDF.
+
+**Valuation insight.**
+
+- Os valores monetários são compactos em pt-BR ("R$ 8,4 milhões").
+- "Metade abaixo e metade acima" só é afirmado quando no máximo um cenário coincide com a mediana; havendo empates, publicam-se as frações reais abaixo, acima e exatamente na mediana.
+- A faixa P25–P75 só é descrita como "metade dos cenários" quando concentra 50% ± 1 p.p. dos cenários.
+- P10 ≤ 0 é descrito como valor não positivo para os sócios.
+- A frase de incerteza segue o critério e o motivo da regra `uncertainty-v1` (§7).
+
+**Key drivers.** São os até três drivers primitivos com participação de pelo menos 5% (§10), na ordem do ranking, com as respectivas participações. Quando R² < 0,6, a frase declara que interações e efeitos não lineares também pesam.
+
+**Upside e downside drivers.** Comparam os cenários com valuation ≥ P90 (upside) e ≤ P10 (downside) com o conjunto. Empates no percentil permanecem no grupo, e o tamanho real do grupo é informado. Um driver aparece quando:
+
+- a mediana do grupo se desloca pelo menos 0,25 intervalo interquartil em relação à mediana geral; ou
+- no caso de variável 0/1, a taxa se desloca pelo menos 5 p.p.
+
+Aparecem no máximo três por lista, na ordem de participação. A redação usa as frases do catálogo, como "Receita acima do plano — mediana de 1,33x nos 10% melhores cenários, contra 0,97x no conjunto".
+
+**What needs to be true.** Para uma meta T, `atinge = valuation ≥ T` sobre todos os cenários.
+
+- A probabilidade é informada com hits/N e intervalo de Wilson de 95% do erro Monte Carlo. Sem nenhum acerto, o texto diz que a meta não ocorreu sob as premissas e informa o limite superior, sem chamá-la de impossível.
+- As condições comparadas são as métricas de resultado (Receita, OPEX, Margem EBITDA e CAGR do Ano 5), os parâmetros de valuation com faixa e o encerramento. Os fatores latentes (choques de receita e custo) ficam fora por serem redundantes com as métricas. Snapshots sem métricas de resultado usam todos os vetores.
+- O tamanho de efeito é o delta de Cliff (P(X_atinge > X_demais) − P(X_atinge < X_demais), empates contam meio). Uma condição é material quando |delta| ≥ 0,33, ou, para variáveis 0/1, quando a diferença de taxas é de pelo menos 5 p.p.
+- Para condições contínuas materiais, o limiar é o P25 do grupo que atinge a meta (ou o P75, quando valores menores favorecem a meta). Informam-se a cobertura, isto é, a fração do grupo além do limiar (≈75%), e a taxa de acerto entre todos os cenários além do limiar, comparada com a taxa base.
+- A interpretação cita as duas condições materiais de maior efeito.
+- Com menos de 30 cenários no menor grupo, o texto alerta para instabilidade. Com menos de 10, não publica limiares, só medianas.
+- Toda comparação termina com a ressalva de que descreve associações, não causa e efeito.
+
+**Riscos e resumo executivo.** Os riscos listam:
+
+- a taxa de encerramento;
+- a fração de valuation ≤ 0;
+- a incerteza, quando alta ou muito alta;
+- o primeiro downside driver que não seja o encerramento, já citado;
+- a premissa de maior impacto no tornado (§15);
+- o ajuste fraco dos drivers, quando houver.
+
+O resumo executivo tem de 1 a 3 parágrafos:
+
+1. valor, faixa e incerteza;
+2. drivers, upside e downside;
+3. meta, principais riscos e a ressalva de causalidade.
