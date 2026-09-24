@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, Check } from "@/components/icons";
-import { MonteCarloVisual } from "@/components/monte-carlo-visual";
+import { FuturesFallback } from "@/components/landing/futures-fallback";
+import { buildFuturesSummary } from "@/components/landing/futures-model";
+import { HeroVisual } from "@/components/landing/hero-visual";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+
+// Illustrative, deterministic 10.000-scenario run (seed 471829), computed once on the server.
+const futuresSummary = buildFuturesSummary();
 
 const steps = [
   ["01", "Informe sua startup", "Contexto, estágio e modelo de negócio."],
@@ -46,7 +51,7 @@ export default function HomePage() {
                 <span><Check /> Dados privados</span>
               </div>
             </div>
-            <MonteCarloVisual />
+            <HeroVisual summary={futuresSummary} fallback={<FuturesFallback summary={futuresSummary} />} />
           </div>
           <div className="container proof-strip" aria-label="Capacidades principais">
             <div><span>SIMULAÇÃO</span><strong>1k — 25k</strong><small>cenários por execução</small></div>
@@ -66,13 +71,13 @@ export default function HomePage() {
           </div>
           <div className="container thesis-comparison">
             <article className="comparison-card old-model">
-              <p>MODELO CONVENCIONAL</p><span>Uma planilha. Uma premissa.</span><strong>R$ 8,4M</strong><small>Um número que esconde a incerteza.</small>
+              <p>MODELO CONVENCIONAL</p><span>Uma planilha. Uma premissa.</span><strong>R$ 8,4 mi</strong><small>Um número que esconde a incerteza.</small>
             </article>
             <div className="comparison-arrow" aria-hidden="true"><ArrowRight /></div>
             <article className="comparison-card new-model">
               <p>STARTUPVALUE</p><span>10.000 possíveis futuros.</span>
               <div className="range-line"><i /><b /><i /></div>
-              <div className="range-values"><small>P25 · R$ 6,1M</small><strong>P50 · R$ 8,4M</strong><small>P75 · R$ 11,7M</small></div>
+              <div className="range-values"><small>P25 · R$ 6,1 mi</small><strong>P50 · R$ 8,4 mi</strong><small>P75 · R$ 11,7 mi</small></div>
             </article>
           </div>
         </section>
@@ -114,9 +119,9 @@ export default function HomePage() {
             <div className="result-showcase" aria-label="Exemplo ilustrativo de análise">
               <div className="sample-label">EXEMPLO ILUSTRATIVO · DADOS NÃO REAIS</div>
               <div className="result-top"><span>ESTIMATIVA DE VALUATION <small>DCF · EQUITY VALUE</small></span><b>SIMULATION COMPLETE</b></div>
-              <div className="result-value"><span>P50</span><strong>R$ 8,4M</strong><small>Mediana de 10.000 cenários</small></div>
-              <div className="result-range"><div><span>DOWNSIDE · P10</span><strong>R$ 4,3M</strong></div><div><span>CORE RANGE · P25—P75</span><strong>R$ 6,1M — R$ 11,7M</strong></div><div><span>UPSIDE · P90</span><strong>R$ 15,2M</strong></div></div>
-              <div className="target-card"><div><span>PROBABILIDADE DE R$ 15M+</span><strong>27,4%</strong></div><div className="probability-track"><i /></div><p>2.740 de 10.000 cenários simulados atingiram ou superaram a meta.</p></div>
+              <div className="result-value"><span>P50</span><strong>R$ 8,4 mi</strong><small>Mediana de 10.000 cenários</small></div>
+              <div className="result-range"><div><span>DOWNSIDE · P10</span><strong>R$ 4,3 mi</strong></div><div><span>CORE RANGE · P25—P75</span><strong>R$ 6,1 mi — R$ 11,7 mi</strong></div><div><span>UPSIDE · P90</span><strong>R$ 15,2 mi</strong></div></div>
+              <div className="target-card"><div><span>PROBABILIDADE DE R$ 15 MI OU MAIS</span><strong>27,4%</strong></div><div className="probability-track"><i /></div><p>2.740 de 10.000 cenários simulados atingiram ou superaram a meta.</p></div>
               <div className="drivers-mini"><span>PRINCIPAIS ASSOCIAÇÕES</span><div><b>Receita Ano 5</b><i style={{ width: "88%" }} /><strong>+0,71</strong></div><div><b>Margem EBITDA</b><i style={{ width: "72%" }} /><strong>+0,58</strong></div><div><b>WACC</b><i className="negative" style={{ width: "57%" }} /><strong>−0,46</strong></div></div>
             </div>
           </div>

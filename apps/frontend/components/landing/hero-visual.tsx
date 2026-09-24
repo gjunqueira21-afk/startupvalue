@@ -1,0 +1,165 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { FALLBACK_VIEW, fallbackPercent, formatMillions, formatPercent, labelAnchors, type FuturesSummary, type LabelKey } from "./futures-model";
+import styles from "./hero-visual.module.css";
+
+// WebGL scene is client-only and lives in its own chunk; it is only requested after the
+// page is idle, when the hero is on screen, WebGL is available and motion is allowed.
+const FuturesScene = dynamic(() => import("./futures-scene"), { ssr: false, loading: () => null });
+
+type Mode = "static" | "loading" | "live";
+
+function hasCapableWebGL() {
+  try {
+    const canvas = document.createElement("canvas");
+    const options = { failIfMajorPerformanceCaveat: true } as WebGLContextAttributes;
+    const gl = (canvas.getContext("webgl2", options) || canvas.getContext("webgl", options)) as WebGLRenderingContext | null;
+    if (!gl) return false;
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fallback: ReactNode }) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const labelRefs = useRef<Partial<Record<LabelKey, HTMLElement | null>>>({});
+  const [mode, setMode] = useState<Mode>("static");
+  const [lite, setLite] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let idleHandle = 0;
+    let timeoutHandle = 0;
+    let observer: IntersectionObserver | null = null;
+
+    const start = () => {
+      if (reduced.matches || !hasCapableWebGL()) return;
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          if (!entry.isIntersecting) return;
+          observer?.disconnect();
+          const mount = () => {
+            setLite(window.matchMedia("(max-width: 760px)").matches || (navigator.hardwareConcurrency || 8) <= 2);
+            setMode("loading");
+          };
+          if ("requestIdleCallback" in window) idleHandle = window.requestIdleCallback(mount, { timeout: 1500 });
+          else timeoutHandle = globalThis.setTimeout(mount, 400) as unknown as number;
+        },
+        { rootMargin: "200px" },
+      );
+      observer.observe(stage);
+    };
+
+    const onMotionChange = () => {
+      if (reduced.matches) {
+        observer?.disconnect();
+        setMode("static");
+        setIntroDone(false);
+      } else {
+        start();
+      }
+    };
+
+    start();
+    reduced.addEventListener("change", onMotionChange);
+    return () => {
+      observer?.disconnect();
+      if (idleHandle) window.cancelIdleCallback(idleHandle);
+      if (timeoutHandle) window.clearTimeout(timeoutHandle);
+      reduced.removeEventListener("change", onMotionChange);
+    };
+  }, []);
+
+  const onReady = useCallback(() => setMode("live"), []);
+  const onIntroDone = useCallback(() => setIntroDone(true), []);
+  const onFail = useCallback(() => {
+    setMode("static");
+    setIntroDone(false);
+  }, []);
+
+  const anchors = labelAnchors(summary);
+  const place = (key: LabelKey) => {
+    const [left, top] = fallbackPercent(anchors[key]);
+    return { left: `${left}%`, top: `${top}%` };
+  };
+  const ref = (key: LabelKey) => (node: HTMLElement | null) => {
+    labelRefs.current[key] = node;
+  };
+  const { terminal } = summary;
+  const live = mode === "live";
+  const stageClass = [styles.stage, live ? styles.live : "", live && introDone ? styles.labelsIn : ""].join(" ");
+
+  return (
+    <figure className={styles.visual}>
+      <div className={styles.hud}>
+        <span className={styles.hudTitle}>
+          <i aria-hidden="true" /> Simulação Monte Carlo
+        </span>
+        <span className={styles.hudMeta}>10.000 cenários · seed 471829 · 60 meses</span>
+      </div>
+
+      <div className={stageClass} ref={stageRef}>
+        <div className={styles.fallback}>
+          <div className={styles.frame} style={{ aspectRatio: `${FALLBACK_VIEW.maxX - FALLBACK_VIEW.minX} / ${FALLBACK_VIEW.maxY - FALLBACK_VIEW.minY}` }}>
+            {fallback}
+            <div className={styles.labels} aria-hidden="true" data-layer="static">
+              {!live && <StaticLabels place={place} summary={summary} />}
+            </div>
+          </div>
+        </div>
+
+        {mode !== "static" && (
+          <div className={styles.canvasHost}>
+            <FuturesScene summary={summary} lite={lite} labels={labelRefs} onReady={onReady} onIntroDone={onIntroDone} onFail={onFail} />
+          </div>
+        )}
+
+        {live && (
+          <div className={`${styles.labels} ${styles.liveLabels}`} aria-hidden="true">
+            <span className={`${styles.label} ${styles.labelToday}`} ref={ref("today")}><b>Hoje</b></span>
+            <span className={`${styles.label} ${styles.labelYear}`} ref={ref("year5")}><b>Ano 5</b></span>
+            <span className={`${styles.label} ${styles.labelPct}`} ref={ref("p90")}><b>P90</b>{formatMillions(terminal.p90)}</span>
+            <span className={`${styles.label} ${styles.labelPct} ${styles.labelMedian}`} ref={ref("p50")}><b>P50</b>{formatMillions(terminal.p50)}</span>
+            <span className={`${styles.label} ${styles.labelPct}`} ref={ref("p10")}><b>P10</b>{formatMillions(terminal.p10)}</span>
+            <span className={`${styles.label} ${styles.labelPct} ${styles.labelFailure}`} ref={ref("failure")}><b>Falência</b>{formatPercent(summary.failureRate)}</span>
+          </div>
+        )}
+      </div>
+
+      <figcaption className={styles.caption}>
+        <ul className={styles.legend} aria-label="Legenda">
+          <li><i className={styles.keyCube} aria-hidden="true" /> 1 cubo = 100 cenários</li>
+          <li><i className={styles.keyMedian} aria-hidden="true" /> P50 · mediana</li>
+          <li><i className={styles.keyBand} aria-hidden="true" /> P25–P75</li>
+          <li><i className={styles.keyFailure} aria-hidden="true" /> Falência</li>
+        </ul>
+        <p className={styles.note}>Dados ilustrativos · Equity via DCF · BRL</p>
+        <p className={styles.srOnly}>
+          Distribuição ilustrativa após 5 anos: P10 {formatMillions(terminal.p10)}, P25 {formatMillions(terminal.p25)}, P50 {formatMillions(terminal.p50)},
+          P75 {formatMillions(terminal.p75)}, P90 {formatMillions(terminal.p90)}. {formatPercent(summary.failureRate)} dos cenários terminam em falência.
+        </p>
+      </figcaption>
+    </figure>
+  );
+}
+
+function StaticLabels({ place, summary }: { place: (key: LabelKey) => { left: string; top: string }; summary: FuturesSummary }) {
+  const { terminal } = summary;
+  return (
+    <>
+      <span className={`${styles.label} ${styles.labelToday}`} style={place("today")}><b>Hoje</b></span>
+      <span className={`${styles.label} ${styles.labelYear}`} style={place("year5")}><b>Ano 5</b></span>
+      <span className={`${styles.label} ${styles.labelPct}`} style={place("p90")}><b>P90</b>{formatMillions(terminal.p90)}</span>
+      <span className={`${styles.label} ${styles.labelPct} ${styles.labelMedian}`} style={place("p50")}><b>P50</b>{formatMillions(terminal.p50)}</span>
+      <span className={`${styles.label} ${styles.labelPct}`} style={place("p10")}><b>P10</b>{formatMillions(terminal.p10)}</span>
+      <span className={`${styles.label} ${styles.labelPct} ${styles.labelFailure}`} style={place("failure")}><b>Falência</b>{formatPercent(summary.failureRate)}</span>
+    </>
+  );
+}
