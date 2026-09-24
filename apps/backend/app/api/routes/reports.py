@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import select
@@ -17,12 +17,15 @@ from app.db.models import (
     SimulationStatus,
     Startup,
 )
-from app.decision.drivers import DriverResult, spearman_drivers
 from app.decision.targets import analyze_target
 from app.reports import build_report_pdf
 from app.reports.from_result import report_from_result
 from app.services.audit import record_event
-from app.services.simulation import load_sample_vectors
+from app.services.simulation import (
+    driver_ranking_payload,
+    load_sample_vectors,
+    rank_snapshot_drivers,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["reports"])
 
@@ -61,7 +64,8 @@ def download_simulation_report(
             SimulationSamples.simulation_result_id == result.id,
         )
     )
-    drivers: tuple[DriverResult, ...] = ()
+    persisted = result.summary.get("drivers")
+    ranking: dict[str, Any] | None = persisted if isinstance(persisted, dict) else None
     target_analysis = None
     if snapshot is None and target is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "simulation_samples_unavailable")
@@ -70,7 +74,8 @@ def download_simulation_report(
             valuations, factors = load_sample_vectors(
                 snapshot, result=result, simulation=simulation
             )
-            drivers = spearman_drivers(factors, valuations)
+            if ranking is None:
+                ranking = driver_ranking_payload(rank_snapshot_drivers(factors, valuations))
             if target is not None:
                 target_analysis = analyze_target(valuations, target, factors)
         except RuntimeError as exc:
@@ -84,7 +89,7 @@ def download_simulation_report(
         revision=revision,
         scenario=scenario,
         startup=startup,
-        drivers=drivers,
+        drivers=ranking,
         target=target_analysis,
     )
     pdf = build_report_pdf(data)

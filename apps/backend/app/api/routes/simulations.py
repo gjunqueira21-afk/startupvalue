@@ -9,6 +9,7 @@ from app.api.dependencies import Actor, Database
 from app.api.schemas import (
     ConditionalStatisticsResponse,
     DecisionResponse,
+    DriverRankingSummary,
     DriverResponse,
     SimulationCreateRequest,
     SimulationResponse,
@@ -18,11 +19,17 @@ from app.api.schemas import (
     TargetResponse,
 )
 from app.db.models import Role, Simulation, SimulationResult, SimulationSamples
-from app.decision.drivers import spearman_drivers
+from app.decision.catalog import describe
 from app.decision.targets import analyze_target
 from app.repositories.resources import get_revision, get_simulation
 from app.services.audit import record_event
-from app.services.simulation import execute_synchronously, load_sample_vectors
+from app.services.simulation import (
+    driver_ranking_payload,
+    execute_synchronously,
+    load_sample_vectors,
+    rank_snapshot_drivers,
+    with_uncertainty,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["simulations"])
 
@@ -36,7 +43,9 @@ def _response(simulation: Simulation, result: SimulationResult | None) -> Simula
         seed=simulation.seed,
         simulation_count=simulation.simulation_count,
         status=simulation.status.value,
-        summary=SimulationSummary.model_validate(result.summary) if result else None,
+        summary=SimulationSummary.model_validate(with_uncertainty(result.summary))
+        if result
+        else None,
         result_hash=result.result_hash if result else None,
         created_at=simulation.created_at,
     )
@@ -150,27 +159,34 @@ def _decision_source(
 def read_decision(simulation_id: str, db: Database, actor: Actor) -> DecisionResponse:
     simulation, result, snapshot = _decision_source(simulation_id, db, actor)
     try:
+        # Verify the snapshot even when the ranking is persisted: a tampered payload must fail.
         valuations, factors = load_sample_vectors(snapshot, result=result, simulation=simulation)
-        drivers = spearman_drivers(factors, valuations)
     except RuntimeError as exc:
         raise HTTPException(
             status.HTTP_500_INTERNAL_SERVER_ERROR, "simulation_samples_integrity_error"
         ) from exc
+    persisted = result.summary.get("drivers")
+    ranking = DriverRankingSummary.model_validate(
+        persisted
+        if isinstance(persisted, dict)
+        else driver_ranking_payload(rank_snapshot_drivers(factors, valuations))
+    )
     return DecisionResponse(
         simulation_id=simulation.id,
         result_hash=result.result_hash,
         basis=str(result.summary["basis"]),
         scenario_count=simulation.simulation_count,
+        method_version=ranking.method_version,
+        r_squared=ranking.r_squared,
+        warnings=ranking.warnings,
         drivers=[
             DriverResponse(
-                name=item.name,
-                rho=item.rho,
-                direction=item.direction,
-                count=item.count,
-                status=item.status,
-                population=item.population,
+                **item.model_dump(),
+                label=describe(item.name).label,
+                unit=describe(item.name).unit,
+                count=ranking.scenario_count,
             )
-            for item in drivers
+            for item in ranking.items
         ],
     )
 
@@ -204,6 +220,9 @@ def read_target(
         comparisons=[
             TargetComparisonResponse(
                 name=item.name,
+                label=describe(item.name).label,
+                unit=describe(item.name).unit,
+                role=describe(item.name).role,
                 hit=ConditionalStatisticsResponse(
                     count=item.hit.count,
                     p25=item.hit.p25,

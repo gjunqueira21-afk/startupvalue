@@ -6,6 +6,7 @@ import {
   getTarget,
   type DecisionResponse,
   type TargetResponse,
+  type VariableUnit,
 } from "@/lib/api/simulations";
 import { API_URL } from "@/lib/api/client";
 
@@ -13,32 +14,11 @@ const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL",
 const pct = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 1 });
 const integer = new Intl.NumberFormat("pt-BR");
 
-function factorLabel(name: string): string {
-  const known: Record<string, string> = {
-    factor: "Fator econômico do cenário",
-    cash_flow_factor: "Fator de fluxo de caixa",
-    year_5_cash_flow: "Fluxo de caixa do Ano 5",
-    revenue_year_5: "Receita do Ano 5",
-    failure_month: "Mês de failure",
-    scenario_factor_mean: "Choque médio do cenário",
-    realized_cash_flow_total: "Fluxo de caixa realizado (total)",
-    realized_cash_flow_final_12m: "Fluxo de caixa realizado (Ano 5)",
-    failure_state: "Estado de encerramento (0/1)",
-    revenue_year5: "Receita realizada no Ano 5",
-    margin_year5: "Margem bruta realizada no Ano 5",
-    modeled_gross_margin_year5: "Margem bruta simulada no Ano 5",
-    opex_year5: "OPEX realizado no Ano 5",
-    revenue_factor_mean: "Choque médio de receita",
-    cost_factor_mean: "Choque médio de custos",
-    margin_delta_mean: "Variação média da margem",
-  };
-  return known[name] ?? name.replaceAll("_", " ");
-}
-
-function FactorValue({ name, value }: { name: string; value: number | null }) {
+function FactorValue({ unit, value }: { unit: VariableUnit | null; value: number | null }) {
   if (value === null) return <>—</>;
-  if (/revenue|opex|cash_flow/.test(name)) return <>{brl.format(value)}</>;
-  if (/margin/.test(name)) return <>{pct.format(value)}</>;
+  if (unit === "currency") return <>{brl.format(value)}</>;
+  if (unit === "ratio") return <>{pct.format(value)}</>;
+  if (unit === "multiplier") return <>{value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}x</>;
   return <>{Number.isInteger(value) ? integer.format(value) : value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</>;
 }
 
@@ -84,13 +64,13 @@ export function DecisionAnalysis({ simulationId, suggestedTarget }: { simulation
       <article className="result-card">
         <header>
           <div><p>KEY VALUATION DRIVERS</p><h2>Associação com o valuation</h2></div>
-          <span>SPEARMAN · AMOSTRA COMPLETA</span>
+          <span>SPEARMAN + SRRC · AMOSTRA COMPLETA</span>
         </header>
         {decision ? (
           <>
-            {decision.drivers.filter((driver) => !driver.name.startsWith("realized_cash_flow_")).map((driver) => (
+            {decision.drivers.map((driver) => (
               <div className="driver-row" key={driver.name}>
-                <span>{factorLabel(driver.name)}</span>
+                <span>{driver.label}</span>
                 <div><i className={driver.rho !== null && driver.rho < 0 ? "negative" : ""} style={{ width: `${Math.abs(driver.rho ?? 0) * 100}%` }} /></div>
                 <strong>{driver.rho === null ? "—" : `${driver.rho >= 0 ? "+" : ""}${driver.rho.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}`}</strong>
               </div>
@@ -117,7 +97,7 @@ export function DecisionAnalysis({ simulationId, suggestedTarget }: { simulation
               <table>
                 <caption>Medianas condicionais · cenários que atingem vs. demais</caption>
                 <thead><tr><th>Fator</th><th>Atinge</th><th>Não atinge</th></tr></thead>
-                <tbody>{target.comparisons.map((row) => <tr key={row.name}><td>{factorLabel(row.name)}</td><td><FactorValue name={row.name} value={row.hit.p50} /></td><td><FactorValue name={row.name} value={row.miss.p50} /></td></tr>)}</tbody>
+                <tbody>{target.comparisons.map((row) => <tr key={row.name}><td>{row.label}</td><td><FactorValue unit={row.unit} value={row.hit.p50} /></td><td><FactorValue unit={row.unit} value={row.miss.p50} /></td></tr>)}</tbody>
               </table>
             )}
             <p className="chart-note">As diferenças descrevem os grupos observados nesta simulação; não são metas causais garantidas.</p>

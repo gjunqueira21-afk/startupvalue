@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base, get_db
-from app.db.models import SimulationSamples
+from app.db.models import SimulationResult, SimulationSamples
 from app.main import app
 
 
@@ -108,10 +108,23 @@ def test_decision_reads_persisted_vectors_and_is_workspace_scoped(
     assert decision_response.status_code == 200, decision_response.text
     decision = decision_response.json()
     assert decision["result_hash"] == run["result_hash"]
-    assert decision["method"] == "spearman"
+    assert decision["method"] == "spearman+srrc"
+    assert decision["method_version"] == "drivers-v1"
     assert decision["scenario_count"] == 1000
-    assert any(driver["name"] == "scenario_factor_mean" for driver in decision["drivers"])
+    assert 0.0 <= decision["r_squared"] <= 1.0
+    factor = next(d for d in decision["drivers"] if d["name"] == "scenario_factor_mean")
+    assert factor["label"] == "Fluxo de caixa vs. plano"
+    assert factor["unit"] == "multiplier"
+    assert factor["direction"] == "positive"
+    assert factor["srrc"] is not None and factor["contribution"] is not None
     assert all(driver["count"] == 1000 for driver in decision["drivers"])
+    assert decision["drivers"] == [
+        {**item, "count": 1000, "label": d["label"], "unit": d["unit"]}
+        for item, d in zip(summary["drivers"]["items"], decision["drivers"], strict=True)
+    ]
+    uncertainty = summary["uncertainty"]
+    assert uncertainty["rule_version"] == "uncertainty-v1"
+    assert summary["uncertainty_label"] == uncertainty["label"]
 
     p50 = summary["percentiles"]["p50"]
     target_response = owner.get(
@@ -124,6 +137,10 @@ def test_decision_reads_persisted_vectors_and_is_workspace_scoped(
     assert target["wilson95_low"] <= target["probability"] <= target["wilson95_high"]
     assert target["comparisons"]
     assert target["result_hash"] == run["result_hash"]
+    failure = next(c for c in target["comparisons"] if c["name"] == "failure_state")
+    assert failure["label"] == "Encerramento das operações"
+    assert failure["unit"] == "binary"
+    assert failure["role"] == "driver"
 
     _post(
         outsider,
@@ -190,3 +207,31 @@ def test_snapshot_is_reproducible_for_same_revision_seed_and_count(
         assert len(snapshots) == 2
         assert snapshots[0].payload_hash == snapshots[1].payload_hash
         assert snapshots[0].payload == snapshots[1].payload
+
+
+def test_results_persisted_before_schema_1_2_are_enriched_on_read(
+    clients: tuple[TestClient, TestClient, sessionmaker[Session]],
+) -> None:
+    owner, _, factory = clients
+    run = _run(owner, "legacy-owner@example.com")
+    simulation_id = str(run["simulation_id"])
+    with factory() as db:
+        result = db.scalar(select(SimulationResult))
+        assert result is not None
+        legacy = dict(result.summary)
+        for key in ("uncertainty", "drivers"):
+            legacy.pop(key)
+        legacy["uncertainty_label"] = "NOT AVAILABLE"
+        result.summary = legacy
+        result.schema_version = "1.1.0"
+        db.commit()
+
+    read = owner.get(f"/api/v1/simulations/{simulation_id}")
+    assert read.status_code == 200, read.text
+    summary = read.json()["summary"]
+    assert summary["uncertainty"] == run["summary"]["uncertainty"]
+    assert summary["uncertainty_label"] == run["summary"]["uncertainty_label"]
+    decision = owner.get(f"/api/v1/simulations/{simulation_id}/decision").json()
+    assert [d["name"] for d in decision["drivers"]] == [
+        item["name"] for item in run["summary"]["drivers"]["items"]
+    ]

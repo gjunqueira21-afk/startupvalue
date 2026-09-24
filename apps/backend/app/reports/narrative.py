@@ -43,12 +43,12 @@ def executive_narrative(data: ReportData) -> tuple[str, ...]:
             f"{format_integer(data.audit.simulation_count)} cenários "
             f"({format_percent(data.target.probability)})."
         )
-    estimated = [driver for driver in data.drivers if driver.association is not None]
-    if estimated:
-        strongest = max(estimated, key=lambda driver: abs(driver.association or 0.0))
+    # Drivers arrive ordered by contribution; the first estimated one leads.
+    strongest = next((d for d in data.drivers if d.association is not None), None)
+    if strongest is not None:
         paragraphs.append(
-            f"{strongest.name} apresentou a associação de magnitude mais alta com os "
-            f"resultados de valuation (Spearman {strongest.association:+.2f}); associação "
-            "estatística não implica causalidade."
+            f"{strongest.name} apresentou a associação mais forte com os resultados de "
+            f"valuation (Spearman {strongest.association:+.2f}); associação estatística "
+            "não implica causalidade."
         )
     return tuple(paragraphs)

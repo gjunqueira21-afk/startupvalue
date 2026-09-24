@@ -117,7 +117,10 @@ def test_report_download_uses_persisted_result_and_audit_metadata(
     assert "Árvore Analytics" in text
     assert "Base Case" in text
     assert "Venture Capital Method não foi calculado" in text
-    assert "scenario_factor_mean" in text
+    assert "Fluxo de caixa vs. plano" in text
+    assert "scenario_factor_mean" not in text
+    assert str(saved["summary"]["uncertainty_label"]) in text  # type: ignore[index]
+    assert "NOT AVAILABLE" not in text
 
     from app.reports.narrative import format_money
 
@@ -131,9 +134,71 @@ def test_report_download_uses_persisted_result_and_audit_metadata(
     )
     assert "Target hit" in targeted_text
     assert "Target miss" in targeted_text
-    assert "scenario_factor_mean" in targeted_text
+    assert "Fluxo de caixa vs. plano" in targeted_text
     assert "não garantem efeito causal" in targeted_text
     assert targeted.content != first.content
+
+
+def test_structured_report_formats_business_metrics_in_their_units(
+    clients: tuple[TestClient, TestClient, TestClient],
+) -> None:
+    owner, _, _ = clients
+    _signup(owner, "structured")
+    startup = owner.post("/api/v1/startups", json={"name": "Receita Co", "currency": "BRL"})
+    scenario = owner.post(
+        f"/api/v1/startups/{startup.json()['id']}/scenarios",
+        json={"name": "Base", "mode": "professional"},
+    )
+    revision = owner.post(
+        f"/api/v1/scenarios/{scenario.json()['id']}/revisions",
+        json={
+            "inputs": {
+                "monthly_revenue": [100000.0 + 5000.0 * month for month in range(60)],
+                "monthly_opex": [60000.0] * 60,
+                "monthly_capex": [5000.0] * 60,
+                "gross_margin": 0.7,
+                "revenue_uncertainty": {
+                    "kind": "lognormal",
+                    "mean": 1.0,
+                    "coefficient_of_variation": 0.3,
+                },
+                "cost_uncertainty": {
+                    "kind": "lognormal",
+                    "mean": 1.0,
+                    "coefficient_of_variation": 0.1,
+                },
+                "margin_uncertainty_pp": 0.05,
+                "serial_correlation": 0.5,
+                "persistent_weight": 0.6,
+                "annual_wacc": 0.25,
+                "terminal_growth": 0.04,
+                "failure_probability_horizon": 0.2,
+            }
+        },
+    )
+    assert revision.status_code == 201, revision.text
+    simulation = owner.post(
+        "/api/v1/simulations",
+        json={"scenario_revision_id": revision.json()["id"], "seed": 7, "simulation_count": 1000},
+    ).json()
+    simulation_id = simulation["simulation_id"]
+    target = simulation["summary"]["percentiles"]["p75"]
+    analysis = owner.get(
+        f"/api/v1/simulations/{simulation_id}/target", params={"value": target}
+    ).json()
+    revenue = next(c for c in analysis["comparisons"] if c["name"] == "revenue_year5_operating")
+    report = owner.get(f"/api/v1/simulations/{simulation_id}/report.pdf?target={target}")
+    assert report.status_code == 200, report.text
+    text = "\n".join(
+        page.extract_text() or "" for page in PdfReader(BytesIO(report.content)).pages
+    )
+
+    from app.reports.narrative import format_money
+
+    assert "Receita do Ano 5" in text
+    assert "Margem EBITDA do Ano 5" in text
+    assert "revenue_year5_operating" not in text
+    assert format_money(revenue["hit"]["p50"], "BRL") in text
 
 
 def test_report_download_requires_session_and_workspace(

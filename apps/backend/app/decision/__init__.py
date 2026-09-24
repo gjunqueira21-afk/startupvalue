@@ -1,12 +1,19 @@
 """Decision-intelligence analysis over immutable simulation samples."""
 
-from .drivers import DriverResult, spearman_drivers
+from .catalog import describe, split_by_role
+from .sensitivity import DriverRanking, RankedDriver, rank_drivers
 from .targets import TargetAnalysis, analyze_target, wilson_interval
+from .uncertainty import UncertaintyAssessment, assess_uncertainty
 
 __all__ = [
-    "DriverResult",
+    "DriverRanking",
+    "RankedDriver",
     "TargetAnalysis",
+    "UncertaintyAssessment",
     "analyze_target",
-    "spearman_drivers",
+    "assess_uncertainty",
+    "describe",
+    "rank_drivers",
+    "split_by_role",
     "wilson_interval",
 ]

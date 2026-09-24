@@ -12,6 +12,38 @@ export interface CreateSimulationResponse {
   result_hash: string | null;
 }
 
+export type UncertaintyLabel = "LOW" | "MODERATE" | "HIGH" | "VERY HIGH";
+export type VariableUnit = "currency" | "ratio" | "multiplier" | "binary";
+
+export interface UncertaintyAssessment {
+  label: UncertaintyLabel;
+  reason: "iqr_ratio" | "median_not_positive" | "material_non_positive_mass";
+  rule_version: string;
+  iqr: number;
+  iqr_ratio: number | null;
+  spread80: number;
+  spread80_ratio: number | null;
+  non_positive_probability: number;
+}
+
+export interface RankedDriverSummary {
+  name: string;
+  rho: number | null;
+  srrc: number | null;
+  contribution: number | null;
+  direction: "positive" | "negative" | "neutral" | null;
+  status: string;
+}
+
+export interface DriverRankingSummary {
+  method: "spearman+srrc";
+  method_version: string;
+  scenario_count: number;
+  r_squared: number | null;
+  warnings: string[];
+  items: RankedDriverSummary[];
+}
+
 export interface SimulationSummary {
   basis: string;
   percentiles: Record<"p5" | "p10" | "p25" | "p50" | "p75" | "p90" | "p95", number>;
@@ -20,21 +52,20 @@ export interface SimulationSummary {
   mean: number;
   standard_deviation: number;
   failure_probability: number;
-  uncertainty_label: "NOT AVAILABLE";
+  uncertainty_label: UncertaintyLabel | "NOT AVAILABLE";
   uncertainty_ratio: number | null;
+  uncertainty?: UncertaintyAssessment | null;
+  drivers?: DriverRankingSummary | null;
   breakeven_probabilities: Record<string, number>;
   breakeven_month_percentiles: Record<string, number>;
   non_positive_probability: number;
   histogram?: { edges: number[]; counts: number[] };
 }
 
-export interface Driver {
-  name: string;
-  rho: number | null;
-  direction: "positive" | "negative" | "neutral" | null;
+export interface Driver extends RankedDriverSummary {
+  label: string;
+  unit: VariableUnit | null;
   count: number;
-  status: string;
-  population: string;
 }
 
 export interface DecisionResponse {
@@ -42,7 +73,11 @@ export interface DecisionResponse {
   result_hash: string;
   basis: string;
   scenario_count: number;
-  method: "spearman";
+  method: "spearman+srrc";
+  method_version: string;
+  population: "unconditional";
+  r_squared: number | null;
+  warnings: string[];
   drivers: Driver[];
 }
 
@@ -64,6 +99,9 @@ export interface TargetResponse {
   wilson95_high: number;
   comparisons: {
     name: string;
+    label: string;
+    unit: VariableUnit | null;
+    role: "driver" | "outcome";
     hit: ConditionalStats;
     miss: ConditionalStats;
     median_difference_hit_minus_miss: number | null;

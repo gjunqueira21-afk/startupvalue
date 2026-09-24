@@ -108,6 +108,8 @@ class MethodAnalysis(FrozenModel):
 class Driver(FrozenModel):
     name: str = Field(min_length=1, max_length=160)
     association: Annotated[float | None, Field(ge=-1.0, le=1.0)] = None
+    contribution: Annotated[float | None, Field(ge=0.0, le=1.0)] = None
+    direction: Literal["positive", "negative", "neutral"] | None = None
     population: str = Field(default="unconditional", min_length=1, max_length=120)
     sample_size: int = Field(ge=0)
     status: Literal["estimated", "not_estimable_constant", "insufficient_data"] = "estimated"

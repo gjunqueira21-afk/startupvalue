@@ -4,7 +4,9 @@ import hashlib
 import json
 import uuid
 import zlib
+from collections.abc import Mapping
 from math import inf
+from typing import Any
 
 import numpy as np
 from sqlalchemy import select
@@ -21,6 +23,9 @@ from app.db.models import (
     SimulationStatus,
     Startup,
 )
+from app.decision.catalog import split_by_role
+from app.decision.sensitivity import DriverRanking, rank_drivers
+from app.decision.uncertainty import assess_uncertainty
 from app.services.vc_analysis import analyze_vc_profile
 from app.simulation.distributions import (
     Constant,
@@ -39,6 +44,8 @@ from app.simulation.monte_carlo import (
 )
 from app.simulation.statistics import DistributionSummary, summarize
 from app.valuation.dcf import TerminalAssumptions, accumulated_discount_factors, terminal_value
+
+RESULT_SCHEMA_VERSION = "1.2.0"
 
 
 def distribution_spec(value: DistributionInput) -> DistributionSpec:
@@ -105,6 +112,83 @@ def _summary_payload(
         "non_positive_probability": summary.non_positive_probability,
         "histogram": {"edges": histogram_edges, "counts": histogram_counts},
     }
+
+
+def uncertainty_payload(summary: Mapping[str, Any]) -> dict[str, object]:
+    """Classify dispersion from persisted summary fields; never touches samples."""
+    percentiles = summary["percentiles"]
+    assessment = assess_uncertainty(
+        p10=float(percentiles["p10"]),
+        p25=float(percentiles["p25"]),
+        p50=float(percentiles["p50"]),
+        p75=float(percentiles["p75"]),
+        p90=float(percentiles["p90"]),
+        non_positive_probability=float(summary["non_positive_probability"]),
+    )
+    return {
+        "label": assessment.label,
+        "reason": assessment.reason,
+        "rule_version": assessment.rule_version,
+        "iqr": assessment.iqr,
+        "iqr_ratio": assessment.iqr_ratio,
+        "spread80": assessment.spread80,
+        "spread80_ratio": assessment.spread80_ratio,
+        "non_positive_probability": assessment.non_positive_probability,
+    }
+
+
+def with_uncertainty(summary: Mapping[str, Any]) -> dict[str, Any]:
+    """Results persisted before schema 1.2 lack the classification; derive it on read."""
+    enriched = dict(summary)
+    if not isinstance(enriched.get("uncertainty"), dict):
+        enriched["uncertainty"] = uncertainty_payload(enriched)
+        enriched["uncertainty_label"] = enriched["uncertainty"]["label"]
+    return enriched
+
+
+def driver_ranking_payload(ranking: DriverRanking) -> dict[str, object]:
+    return {
+        "method": ranking.method,
+        "method_version": ranking.method_version,
+        "scenario_count": ranking.scenario_count,
+        "r_squared": ranking.r_squared,
+        "warnings": list(ranking.warnings),
+        "items": [
+            {
+                "name": item.name,
+                "rho": item.rho,
+                "srrc": item.srrc,
+                "contribution": item.contribution,
+                "direction": item.direction,
+                "status": item.status,
+            }
+            for item in ranking.drivers
+        ],
+    }
+
+
+def rank_snapshot_drivers(
+    factors: Mapping[str, np.ndarray], valuations: np.ndarray
+) -> DriverRanking:
+    drivers, _ = split_by_role(factors)
+    return rank_drivers(drivers, valuations)
+
+
+def _operating_outcomes(
+    revenue: np.ndarray, opex: np.ndarray, margins: np.ndarray
+) -> dict[str, np.ndarray]:
+    """Year-5 business metrics on the operating path, before any absorbing failure."""
+    revenue_y1 = np.sum(revenue[:, :12], axis=1)
+    revenue_y5 = np.sum(revenue[:, -12:], axis=1)
+    opex_y5 = np.sum(opex[:, -12:], axis=1)
+    outcomes = {"revenue_year5_operating": revenue_y5, "opex_year5_operating": opex_y5}
+    # Ratios are only published when defined for every scenario; no substitute values.
+    if np.all(revenue_y5 > 0.0):
+        gross_profit_y5 = np.sum(revenue[:, -12:] * margins[:, -12:], axis=1)
+        outcomes["ebitda_margin_year5_operating"] = (gross_profit_y5 - opex_y5) / revenue_y5
+        if np.all(revenue_y1 > 0.0):
+            outcomes["revenue_cagr_operating"] = (revenue_y5 / revenue_y1) ** 0.25 - 1.0
+    return outcomes
 
 
 def _snapshot_payload(
@@ -278,15 +362,17 @@ def execute_synchronously(
         )
         realized_cash_flows = simulated_structured.realized_cash_flows
         failure_months = simulated_structured.failure_months
+        paths = simulated_structured.factor_paths
         realized_inputs = {
-            "revenue_year5": np.sum(simulated_structured.realized_revenue[:, -12:], axis=1),
-            "opex_year5": np.sum(simulated_structured.realized_opex[:, -12:], axis=1),
-            "modeled_gross_margin_year5": np.mean(
-                simulated_structured.factor_paths[:, -12:, 2], axis=1
-            ),
-            "revenue_factor_mean": np.mean(simulated_structured.factor_paths[:, :, 0], axis=1),
-            "cost_factor_mean": np.mean(simulated_structured.factor_paths[:, :, 1], axis=1),
+            "revenue_factor_mean": np.mean(paths[:, :, 0], axis=1),
+            "cost_factor_mean": np.mean(paths[:, :, 1], axis=1),
+            "gross_margin_mean": np.mean(paths[:, :, 2], axis=1),
             "failure_state": (failure_months > 0).astype(np.float64),
+            **_operating_outcomes(
+                simulated_structured.counterfactual_revenue,
+                simulated_structured.counterfactual_opex,
+                paths[:, :, 2],
+            ),
         }
     discount_factors = accumulated_discount_factors(
         inputs.annual_wacc, realized_cash_flows.shape[1]
@@ -310,6 +396,10 @@ def execute_synchronously(
     distribution = summarize(equity_values)
     observed_failure = float(np.mean(failure_months > 0))
     summary = _summary_payload(distribution, observed_failure, equity_values)
+    summary = with_uncertainty(summary)
+    summary["drivers"] = driver_ranking_payload(
+        rank_snapshot_drivers(realized_inputs, equity_values)
+    )
     summary["vc_method"] = _vc_profile_summary(
         db, workspace_id=workspace_id, revision_id=revision_id
     )
@@ -319,7 +409,7 @@ def execute_synchronously(
     samples_hash = hashlib.sha256(equity_values.astype("<f8", copy=False).tobytes()).hexdigest()
     result_material = {
         "simulation_id": simulation.id,
-        "schema_version": "1.1.0",
+        "schema_version": RESULT_SCHEMA_VERSION,
         "summary": summary,
         "samples_hash": samples_hash,
         "samples_payload_hash": payload_hash,
@@ -331,7 +421,7 @@ def execute_synchronously(
     result = SimulationResult(
         workspace_id=workspace_id,
         simulation_id=simulation.id,
-        schema_version="1.1.0",
+        schema_version=RESULT_SCHEMA_VERSION,
         summary=summary,
         result_hash=result_hash,
         samples_object_key=f"db-private://simulation_samples/{snapshot_id}",

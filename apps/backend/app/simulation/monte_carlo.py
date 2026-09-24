@@ -144,6 +144,8 @@ class StructuredCashFlowSimulationResult:
     realized_cash_flows: np.ndarray
     realized_revenue: np.ndarray
     realized_opex: np.ndarray
+    counterfactual_revenue: np.ndarray
+    counterfactual_opex: np.ndarray
     failure_months: np.ndarray
     states: tuple[str, ...]
 
@@ -212,6 +214,8 @@ def simulate_structured_cash_flows(
         _readonly(realized_cash_flows),
         _readonly(realized_revenue),
         _readonly(realized_opex),
+        _readonly(counterfactual_revenue),
+        _readonly(counterfactual_opex),
         _readonly(failures),
         states,
     )

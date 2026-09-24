@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from app.db.models import Scenario, ScenarioRevision, Simulation, SimulationResult, Startup
-from app.decision.drivers import DriverResult
+from app.decision.catalog import describe
 from app.decision.targets import ConditionalStatistics
 from app.decision.targets import TargetAnalysis as CalculatedTargetAnalysis
+from app.services.simulation import with_uncertainty
 
 from .schema import ReportData
 
@@ -71,6 +72,12 @@ def _conditional_payload(statistics: ConditionalStatistics) -> dict[str, float] 
     return {"p25": statistics.p25, "median": statistics.p50, "p75": statistics.p75}
 
 
+def _report_unit(unit: str | None, currency: str) -> str | None:
+    return {"currency": currency, "ratio": "%", "multiplier": "x", "binary": "0/1"}.get(
+        unit or ""
+    )
+
+
 def report_from_result(
     *,
     simulation: Simulation,
@@ -78,12 +85,13 @@ def report_from_result(
     revision: ScenarioRevision,
     scenario: Scenario,
     startup: Startup,
-    drivers: tuple[DriverResult, ...] = (),
+    drivers: dict[str, Any] | None = None,
     target: CalculatedTargetAnalysis | None = None,
 ) -> ReportData:
     """Use saved values only; no valuation or random draw occurs here."""
 
-    summary = result.summary
+    summary = with_uncertainty(result.summary)
+    ranking = drivers or {"items": [], "scenario_count": simulation.simulation_count}
     company_profile = startup.profile or {}
     payload: dict[str, Any] = {
         "audit": {
@@ -134,13 +142,15 @@ def report_from_result(
         },
         "drivers": [
             {
-                "name": driver.name,
-                "association": driver.rho,
-                "population": driver.population,
-                "sample_size": driver.count,
-                "status": driver.status,
+                "name": describe(driver["name"]).label,
+                "association": driver["rho"],
+                "contribution": driver["contribution"],
+                "direction": driver["direction"],
+                "population": "unconditional",
+                "sample_size": ranking["scenario_count"],
+                "status": driver["status"],
             }
-            for driver in drivers
+            for driver in ranking["items"]
         ],
         "target": (
             {
@@ -150,16 +160,8 @@ def report_from_result(
                 "miss_count": target.miss_count,
                 "metrics": [
                     {
-                        "name": comparison.name,
-                        "unit": (
-                            startup.currency
-                            if comparison.name.startswith("realized_cash_flow")
-                            else "x"
-                            if comparison.name == "scenario_factor_mean"
-                            else "0/1"
-                            if comparison.name == "failure_state"
-                            else None
-                        ),
+                        "name": describe(comparison.name).label,
+                        "unit": _report_unit(describe(comparison.name).unit, startup.currency),
                         "target_hit": _conditional_payload(comparison.hit),
                         "target_miss": _conditional_payload(comparison.miss),
                     }

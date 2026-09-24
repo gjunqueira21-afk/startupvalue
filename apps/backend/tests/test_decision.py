@@ -3,15 +3,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from app.decision.drivers import spearman_drivers
+from app.decision.sensitivity import rank_drivers
 from app.decision.targets import analyze_target, wilson_interval
 
 
 def test_spearman_ranks_ties_and_nulls_constant_inputs() -> None:
-    drivers = spearman_drivers(
+    drivers = rank_drivers(
         {"positive": [1, 2, 2, 4], "constant": [7, 7, 7, 7]},
         [10, 20, 20, 40],
-    )
+    ).drivers
     assert drivers[0].name == "positive"
     assert drivers[0].rho == pytest.approx(1.0)
     constant = next(item for item in drivers if item.name == "constant")
@@ -49,11 +49,9 @@ def test_decision_statistics_are_permutation_invariant() -> None:
     valuation = np.array([2, 5, 1, 8, 4], dtype=float)
     factor = np.array([9, 7, 10, 1, 8], dtype=float)
     permutation = np.array([4, 2, 0, 3, 1])
-    original_driver = spearman_drivers({"x": factor}, valuation)[0]
-    shuffled_driver = spearman_drivers(
-        {"x": factor[permutation]}, valuation[permutation]
-    )[0]
-    assert shuffled_driver.rho == original_driver.rho
+    original_driver = rank_drivers({"x": factor}, valuation).drivers[0]
+    shuffled_driver = rank_drivers({"x": factor[permutation]}, valuation[permutation]).drivers[0]
+    assert shuffled_driver.rho == pytest.approx(original_driver.rho, abs=1e-12)
     original_target = analyze_target(valuation, 4, {"x": factor})
     shuffled_target = analyze_target(
         valuation[permutation], 4, {"x": factor[permutation]}

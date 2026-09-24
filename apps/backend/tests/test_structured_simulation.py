@@ -91,6 +91,9 @@ def test_structured_paths_obey_cash_flow_identity_and_absorbing_failure() -> Non
     np.testing.assert_array_equal(failed.realized_cash_flows[:, 1:], 0.0)
     np.testing.assert_array_equal(failed.realized_revenue, 0.0)
     np.testing.assert_array_equal(failed.realized_opex, 0.0)
+    np.testing.assert_array_equal(failed.counterfactual_revenue, 100.0)
+    np.testing.assert_array_equal(failed.counterfactual_opex, 20.0)
+    assert failed.counterfactual_revenue.flags.writeable is False
 
 
 def test_structured_stochastic_paths_are_seed_reproducible() -> None:
@@ -153,13 +156,87 @@ def test_service_uses_normalized_terminal_and_persists_economic_drivers() -> Non
     )
     assert len(valuations) == 1000
     assert math.isclose(float(valuations[0]), expected, rel_tol=1e-12)
-    assert factors["revenue_year5"][0] == 1300.0
-    assert factors["opex_year5"][0] == 240.0
-    assert factors["modeled_gross_margin_year5"][0] == 0.5
-    assert "realized_cash_flow_total" not in factors
-    assert "realized_cash_flow_final_12m" not in factors
+    assert set(factors) == {
+        "revenue_factor_mean",
+        "cost_factor_mean",
+        "gross_margin_mean",
+        "failure_state",
+        "revenue_year5_operating",
+        "opex_year5_operating",
+        "ebitda_margin_year5_operating",
+        "revenue_cagr_operating",
+    }
+    assert factors["revenue_year5_operating"][0] == 1300.0
+    assert factors["opex_year5_operating"][0] == 240.0
+    assert factors["gross_margin_mean"][0] == 0.5
+    assert factors["ebitda_margin_year5_operating"][0] == pytest.approx((650.0 - 240.0) / 1300.0)
+    assert factors["revenue_cagr_operating"][0] == pytest.approx((1300.0 / 1200.0) ** 0.25 - 1)
     assert result.summary["vc_method"]["status"] == "unavailable"
+    assert result.schema_version == "1.2.0"
     engine.dispose()
+
+
+def _run_service(inputs: dict[str, object]) -> tuple[object, dict[str, object]]:
+    engine = create_engine("sqlite+pysqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        simulation, result = execute_synchronously(
+            db,
+            workspace_id="00000000-0000-0000-0000-000000000001",
+            revision_id="00000000-0000-0000-0000-000000000002",
+            canonical_inputs=inputs,
+            request=SimulationRunRequest(seed=471829, simulation_count=1000),
+        )
+        db.commit()
+        snapshot = db.scalar(select(SimulationSamples))
+        assert snapshot is not None
+        _, factors = load_sample_vectors(snapshot, result=result, simulation=simulation)
+        summary = dict(result.summary)
+    engine.dispose()
+    return factors, summary
+
+
+def test_outcome_metrics_describe_the_operating_path_even_after_failure() -> None:
+    inputs = {**_structured_inputs(), "failure_probability_horizon": 1.0}
+    factors, _ = _run_service(inputs)
+    np.testing.assert_array_equal(factors["failure_state"], 1.0)
+    # Realized revenue is zero after failure; the operating-path metric keeps the plan so a
+    # high-OPEX survivor is never confused with "more OPEX, more valuation".
+    np.testing.assert_array_equal(factors["revenue_year5_operating"], 1200.0)
+    np.testing.assert_array_equal(factors["opex_year5_operating"], 240.0)
+
+
+def test_ratio_outcomes_are_omitted_when_revenue_is_not_positive() -> None:
+    inputs = {**_structured_inputs(), "monthly_revenue": [0.0] * 60}
+    factors, _ = _run_service(inputs)
+    assert "ebitda_margin_year5_operating" not in factors
+    assert "revenue_cagr_operating" not in factors
+    assert "revenue_year5_operating" in factors
+
+
+def test_summary_persists_uncertainty_and_driver_ranking() -> None:
+    inputs = {
+        **_structured_inputs(),
+        "revenue_uncertainty": {"kind": "lognormal", "mean": 1.0, "coefficient_of_variation": 0.3},
+        "cost_uncertainty": {"kind": "lognormal", "mean": 1.0, "coefficient_of_variation": 0.1},
+        "margin_uncertainty_pp": 0.03,
+        "failure_probability_horizon": 0.2,
+    }
+    _, summary = _run_service(inputs)
+    uncertainty = summary["uncertainty"]
+    assert isinstance(uncertainty, dict)
+    assert uncertainty["rule_version"] == "uncertainty-v1"
+    assert summary["uncertainty_label"] == uncertainty["label"]
+    assert uncertainty["label"] in {"LOW", "MODERATE", "HIGH", "VERY HIGH"}
+    drivers = summary["drivers"]
+    assert isinstance(drivers, dict)
+    assert drivers["method"] == "spearman+srrc"
+    names = [item["name"] for item in drivers["items"]]
+    assert set(names) == {"revenue_factor_mean", "cost_factor_mean", "gross_margin_mean",
+                          "failure_state"}
+    shares = [item["contribution"] for item in drivers["items"]]
+    assert sum(shares) == pytest.approx(1.0)
+    assert shares == sorted(shares, reverse=True)
 
 
 def test_vc_method_is_derived_from_saved_profile_in_same_workspace() -> None:

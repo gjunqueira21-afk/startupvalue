@@ -225,6 +225,38 @@ class SimulationHistogram(ApiModel):
     counts: list[int]
 
 
+UncertaintyLabelValue = Literal["LOW", "MODERATE", "HIGH", "VERY HIGH", "NOT AVAILABLE"]
+
+
+class UncertaintyResponse(ApiModel):
+    label: Literal["LOW", "MODERATE", "HIGH", "VERY HIGH"]
+    reason: Literal["iqr_ratio", "median_not_positive", "material_non_positive_mass"]
+    rule_version: str
+    iqr: float
+    iqr_ratio: float | None
+    spread80: float
+    spread80_ratio: float | None
+    non_positive_probability: float = Field(ge=0, le=1)
+
+
+class RankedDriverSummary(ApiModel):
+    name: str
+    rho: float | None
+    srrc: float | None
+    contribution: float | None = Field(default=None, ge=0, le=1)
+    direction: Literal["positive", "negative", "neutral"] | None
+    status: str
+
+
+class DriverRankingSummary(ApiModel):
+    method: Literal["spearman+srrc"]
+    method_version: str
+    scenario_count: int
+    r_squared: float | None
+    warnings: list[str]
+    items: list[RankedDriverSummary]
+
+
 class SimulationSummary(ApiModel):
     basis: str
     percentiles: dict[Literal["p5", "p10", "p25", "p50", "p75", "p90", "p95"], float]
@@ -233,8 +265,10 @@ class SimulationSummary(ApiModel):
     mean: float
     standard_deviation: float
     failure_probability: float = Field(ge=0, le=1)
-    uncertainty_label: Literal["NOT AVAILABLE"] = "NOT AVAILABLE"
+    uncertainty_label: UncertaintyLabelValue = "NOT AVAILABLE"
     uncertainty_ratio: float | None
+    uncertainty: UncertaintyResponse | None = None
+    drivers: DriverRankingSummary | None = None
     breakeven_probabilities: dict[str, float] = Field(default_factory=dict)
     breakeven_month_percentiles: dict[str, float] = Field(default_factory=dict)
     non_positive_probability: float
@@ -242,13 +276,13 @@ class SimulationSummary(ApiModel):
     vc_method: dict[str, Any] | None = None
 
 
-class DriverResponse(ApiModel):
-    name: str
-    rho: float | None
-    direction: str | None
+VariableUnit = Literal["currency", "ratio", "multiplier", "binary"]
+
+
+class DriverResponse(RankedDriverSummary):
+    label: str
+    unit: VariableUnit | None
     count: int
-    status: str
-    population: str
 
 
 class DecisionResponse(ApiModel):
@@ -256,7 +290,11 @@ class DecisionResponse(ApiModel):
     result_hash: str
     basis: str
     scenario_count: int
-    method: Literal["spearman"] = "spearman"
+    method: Literal["spearman+srrc"] = "spearman+srrc"
+    method_version: str
+    population: Literal["unconditional"] = "unconditional"
+    r_squared: float | None
+    warnings: list[str]
     drivers: list[DriverResponse]
 
 
@@ -270,6 +308,9 @@ class ConditionalStatisticsResponse(ApiModel):
 
 class TargetComparisonResponse(ApiModel):
     name: str
+    label: str
+    unit: VariableUnit | None
+    role: Literal["driver", "outcome"]
     hit: ConditionalStatisticsResponse
     miss: ConditionalStatisticsResponse
     median_difference_hit_minus_miss: float | None

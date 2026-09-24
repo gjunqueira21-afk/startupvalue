@@ -194,7 +194,11 @@ def _table(rows: list[list[Any]], widths: list[float] | None = None) -> Table:
 def _target_metric_value(value: float, unit: str | None) -> str:
     if unit in {"BRL", "USD", "EUR"}:
         return format_money(value, unit)
-    return f"{value:.3f}".replace(".", ",")
+    if unit == "%":
+        return format_percent(value)
+    if unit == "x":
+        return f"{value:.2f}x".replace(".", ",")
+    return f"{value:.2f}".replace(".", ",")
 
 
 def _method_section(
@@ -389,24 +393,26 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
     )
     story.extend([PageBreak(), Paragraph("Valuation Drivers", styles["h1"])])
     if data.drivers:
-        driver_rows: list[list[Any]] = [["Driver", "Spearman", "População", "N", "Status"]]
+        driver_rows: list[list[Any]] = [["Driver", "Participação", "Spearman", "N", "Status"]]
         driver_rows.extend(
             [
-                driver.name,
+                Paragraph(escape(driver.name), styles["small"]),
+                "N/A" if driver.contribution is None else format_percent(driver.contribution),
                 "N/A" if driver.association is None else f"{driver.association:+.3f}",
-                driver.population,
                 str(driver.sample_size),
                 driver.status,
             ]
             for driver in data.drivers
         )
-        story.append(_table(driver_rows, [46 * mm, 26 * mm, 38 * mm, 22 * mm, 37 * mm]))
+        story.append(_table(driver_rows, [56 * mm, 28 * mm, 26 * mm, 22 * mm, 37 * mm]))
     else:
         story.append(Paragraph("N/A - drivers não informados.", styles["body"]))
     story.append(
         Paragraph(
-            "Coeficientes descrevem associação monotônica nos cenários simulados; "
-            "não demonstram causalidade.",
+            "Participação: parcela da variância dos postos do valuation explicada por cada "
+            "driver primitivo (coeficiente de regressão padronizada de postos ao quadrado, "
+            "normalizado). Coeficientes descrevem associação monotônica nos cenários "
+            "simulados; não demonstram causalidade.",
             styles["body"],
         )
     )
@@ -440,14 +446,7 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
                     if distribution is not None:
                         target_rows.append(
                             [
-                                Paragraph(
-                                    escape(
-                                        f"{metric.name} ({metric.unit})"
-                                        if metric.unit
-                                        else metric.name
-                                    ),
-                                    styles["small"],
-                                ),
+                                Paragraph(escape(metric.name), styles["small"]),
                                 label,
                                 _target_metric_value(distribution.p25, metric.unit),
                                 _target_metric_value(distribution.median, metric.unit),
