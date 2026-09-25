@@ -13,16 +13,11 @@ RUN python -m venv /opt/venv \
     && addgroup --system --gid 10001 startupvalue \
     && adduser --system --uid 10001 --ingroup startupvalue --home /nonexistent --no-create-home startupvalue
 
-COPY pyproject.toml ./
-RUN python - <<'PY'
-import subprocess
-import sys
-import tomllib
-
-with open("pyproject.toml", "rb") as source:
-    dependencies = tomllib.load(source)["project"]["dependencies"]
-subprocess.check_call([sys.executable, "-m", "pip", "install", *dependencies])
-PY
+# Dependencies come from the resolved lockfile, never from a fresh resolution of
+# pyproject.toml, so an image built today matches one built months from now.
+# Regenerate with: uv lock && uv export (see README, "Dependency locking").
+COPY pyproject.toml requirements.lock.txt ./
+RUN pip install --require-hashes --no-deps -r requirements.lock.txt
 
 COPY --chown=startupvalue:startupvalue app ./app
 COPY --chown=startupvalue:startupvalue alembic.ini ./alembic.ini

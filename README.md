@@ -60,7 +60,9 @@ Requirements:
 
 - Docker Engine with Docker Compose v2;
 - at least 4 GB of free RAM for the complete stack;
-- ports 8080 and 8443 available, or alternate values in `.env`.
+- ports 8080 and 8443 available, or alternate values in `.env`;
+- for the non-container route, the toolchain versions pinned in
+  `.python-version` (Python 3.12) and `.nvmrc` (Node 24).
 
 Create a local environment file and replace every `CHANGE_ME` value. Secrets shown in the template are placeholders and must not be reused in production.
 
@@ -85,17 +87,59 @@ docker compose --env-file .env down
 The frontend container runs the optimized standalone server, so this Compose setup is production-like and does not provide source hot reload. Run the application toolchains directly when developing UI or Python code.
 
 ```bash
-npm install
+npm ci
 npm run dev
 
 cd apps/backend
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[dev]'
+python -m pip install --require-hashes --no-deps -r requirements-dev.lock.txt
+python -m pip install -e . --no-deps
 uvicorn app.main:app --reload
 ```
 
 On PowerShell, activate the Python environment with `.venv\Scripts\Activate.ps1`. A local backend started outside Compose needs local `DATABASE_URL` and `REDIS_URL` values.
+
+## Dependency locking
+
+Every dependency version is resolved ahead of time and committed, so an
+environment built today matches one built months from now.
+
+| File | Scope | Consumed by |
+| --- | --- | --- |
+| `package-lock.json` | frontend, exact tree | `npm ci`, frontend Dockerfile |
+| `apps/backend/uv.lock` | backend, source of truth | `uv`, regeneration only |
+| `apps/backend/requirements.lock.txt` | backend runtime, hashed | backend Dockerfile |
+| `apps/backend/requirements-dev.lock.txt` | backend runtime and dev, hashed | local development, CI |
+| `.python-version` | Python 3.12 | `uv`, `pyenv` |
+| `.nvmrc` | Node 24 | `nvm` |
+
+The two `requirements*.lock.txt` files are plain pip input carrying `--hash`
+entries, so installing from them needs no extra tool:
+
+```bash
+python -m pip install --require-hashes --no-deps -r apps/backend/requirements-dev.lock.txt
+```
+
+They are resolved universally across every supported interpreter (3.11 to 3.13)
+and every target platform, so one file covers both Linux containers and Windows
+development machines. Platform-specific dependencies carry environment markers
+and are skipped where they do not apply: `uvloop` installs on Linux, `colorama`
+on Windows.
+
+The backend image installs from `requirements.lock.txt` instead of resolving
+`pyproject.toml` at build time, which is what makes image builds reproducible.
+
+Regenerate after any change to `apps/backend/pyproject.toml`:
+
+```bash
+cd apps/backend
+uv lock
+uv export --no-emit-project --no-dev --format requirements-txt -o requirements.lock.txt
+uv export --no-emit-project --extra dev --format requirements-txt -o requirements-dev.lock.txt
+```
+
+`uv` is needed only to regenerate the lock, never to install from it.
 
 ## Runtime topology
 

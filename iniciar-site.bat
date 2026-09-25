@@ -24,16 +24,21 @@ if errorlevel 1 (
 python -c "import fastapi, uvicorn, alembic, httpx" >nul 2>nul
 if errorlevel 1 (
   echo Instalando dependencias do backend - so na primeira vez...
-  python -m pip install -e "apps\backend[dev]"
+  python -m pip install --require-hashes --no-deps -r "apps\backend\requirements-dev.lock.txt"
   if errorlevel 1 (
     echo [ERRO] Falha ao instalar as dependencias do backend.
+    goto :fail
+  )
+  python -m pip install -e "apps\backend" --no-deps
+  if errorlevel 1 (
+    echo [ERRO] Falha ao registrar o pacote do backend.
     goto :fail
   )
 )
 
 if not exist "node_modules\" (
   echo Instalando dependencias do frontend - so na primeira vez...
-  call npm install
+  call npm ci
   if errorlevel 1 (
     echo [ERRO] Falha ao instalar as dependencias do frontend.
     goto :fail
