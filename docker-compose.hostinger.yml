@@ -19,15 +19,11 @@ services:
       traefik.enable: "true"
       # Traefik runs on the host network: dial the IP on the non-internal network.
       traefik.docker.network: startupvalue_edge
-      traefik.http.routers.startupvalue-web.rule: "Host(`${DOMAIN:?DOMAIN must be set}`) || Host(`www.${DOMAIN}`)"
+      traefik.http.routers.startupvalue-web.rule: "Host(`${DOMAIN:?DOMAIN must be set}`)"
       traefik.http.routers.startupvalue-web.entrypoints: websecure
       traefik.http.routers.startupvalue-web.tls.certresolver: letsencrypt
-      traefik.http.routers.startupvalue-web.middlewares: startupvalue-www@docker,startupvalue-headers@docker
+      traefik.http.routers.startupvalue-web.middlewares: startupvalue-headers@docker
       traefik.http.services.startupvalue-web.loadbalancer.server.port: "3000"
-      # www -> apex
-      traefik.http.middlewares.startupvalue-www.redirectregex.regex: '^https?://www\.(.+)'
-      traefik.http.middlewares.startupvalue-www.redirectregex.replacement: "https://$${1}"
-      traefik.http.middlewares.startupvalue-www.redirectregex.permanent: "true"
       # security headers mirrored from infra/caddy/Caddyfile.prod
       traefik.http.middlewares.startupvalue-headers.headers.stsSeconds: "31536000"
       traefik.http.middlewares.startupvalue-headers.headers.stsIncludeSubdomains: "true"
