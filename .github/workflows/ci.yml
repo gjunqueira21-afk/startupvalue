@@ -63,3 +63,4 @@ jobs:
       - run: cp infra/env/development.env.example .env
       - run: docker compose --env-file .env config --quiet
       - run: docker compose --env-file infra/env/production.env.example -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+      - run: docker compose --env-file infra/env/production.env.example -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.hostinger.yml config --quiet

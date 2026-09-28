@@ -37,6 +37,11 @@ services:
           cpus: "1.00"
           memory: 1G
 
+  migrate:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be an immutable release tag or digest}
+    security_opt:
+      - no-new-privileges:true
+
   worker:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be an immutable release tag or digest}
     restart: unless-stopped
