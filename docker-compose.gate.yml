@@ -3,6 +3,9 @@
 # BASIC_AUTH_USERS is set in /opt/startupvalue/secrets/production.env
 # (htpasswd bcrypt line, e.g. generated with:
 #   docker run --rm httpd:2.4-alpine htpasswd -nbB usuario 'senha').
+# IMPORTANT: Compose interpolates $ inside the env file, so every $ in the
+# hash must be doubled ($$) or the hash arrives truncated in the label:
+#   sed -i '/^BASIC_AUTH_USERS=/ { s/\$\$/\$/g; s/\$/\$\$/g }' production.env
 # Remove the env line and redeploy to open the site to the public.
 
 services:
