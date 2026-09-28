@@ -64,3 +64,4 @@ jobs:
       - run: docker compose --env-file .env config --quiet
       - run: docker compose --env-file infra/env/production.env.example -f docker-compose.yml -f docker-compose.prod.yml config --quiet
       - run: docker compose --env-file infra/env/production.env.example -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.hostinger.yml config --quiet
+      - run: BASIC_AUTH_USERS=ci:placeholder docker compose --env-file infra/env/production.env.example -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.hostinger.yml -f docker-compose.gate.yml config --quiet

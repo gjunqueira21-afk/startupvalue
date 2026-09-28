@@ -75,6 +75,10 @@ sed -i "s|^BACKEND_IMAGE=.*|BACKEND_IMAGE=$GHCR/startupvalue-backend:sha-$SHA|" 
 
 COMPOSE=(docker compose --project-directory "$APP" --env-file "$ENVF"
   -f "$APP/docker-compose.yml" -f "$APP/docker-compose.prod.yml" -f "$APP/docker-compose.hostinger.yml")
+if grep -qE '^BASIC_AUTH_USERS=.+' "$ENVF"; then
+  echo "==> gate de senha (basicauth) ATIVO"
+  COMPOSE+=(-f "$APP/docker-compose.gate.yml")
+fi
 
 # ---------------------------------------------------------------- release
 "${COMPOSE[@]}" config --quiet

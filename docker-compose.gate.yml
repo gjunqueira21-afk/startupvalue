@@ -1,0 +1,17 @@
+# Optional overlay: HTTP Basic Auth in front of the whole site while it is in
+# private testing. Activated automatically by hostinger-deploy.sh whenever
+# BASIC_AUTH_USERS is set in /opt/startupvalue/secrets/production.env
+# (htpasswd bcrypt line, e.g. generated with:
+#   docker run --rm httpd:2.4-alpine htpasswd -nbB usuario 'senha').
+# Remove the env line and redeploy to open the site to the public.
+
+services:
+  frontend:
+    labels:
+      traefik.http.routers.startupvalue-web.middlewares: startupvalue-gate@docker,startupvalue-headers@docker
+      traefik.http.middlewares.startupvalue-gate.basicauth.users: "${BASIC_AUTH_USERS:?set BASIC_AUTH_USERS or drop the gate overlay}"
+      traefik.http.middlewares.startupvalue-gate.basicauth.realm: StartupValue
+
+  backend:
+    labels:
+      traefik.http.routers.startupvalue-api.middlewares: startupvalue-gate@docker,startupvalue-headers@docker
