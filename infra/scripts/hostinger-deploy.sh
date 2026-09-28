@@ -10,6 +10,8 @@
 # stack. Rollback = run again with the previous commit sha.
 set -Eeuo pipefail
 
+main() {
+
 REPO=https://github.com/gjunqueira21-afk/startupvalue
 GHCR=ghcr.io/gjunqueira21-afk
 BASE=/opt/startupvalue
@@ -81,7 +83,7 @@ echo "==> pull das imagens"
 echo "==> subindo banco/cache"
 "${COMPOSE[@]}" up -d --wait postgres redis
 echo "==> migrations (alembic upgrade head)"
-"${COMPOSE[@]}" --profile tools run --rm migrate
+"${COMPOSE[@]}" --profile tools run --rm -T migrate < /dev/null
 echo "==> subindo app"
 "${COMPOSE[@]}" up -d --remove-orphans backend worker frontend
 
@@ -103,3 +105,6 @@ if [ -n "$PREV_FRONTEND" ]; then
   echo "    rollback: bash infra/scripts/hostinger-deploy.sh $PREV_SHA"
 fi
 echo "    smoke: curl -fsS https://$DEFAULT_DOMAIN/health/ready"
+}
+
+main "$@"
