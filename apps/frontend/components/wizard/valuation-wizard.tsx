@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "@/lib/api/client";
+import { formatCurrencyInput, formatCurrencyValue } from "./currency";
 import { createSimulation } from "@/lib/api/simulations";
 import { DEFAULT_DRAFT, DRAFT_STORAGE_KEY, UNCERTAINTY_PRESETS, freshDraft, hydrateDraft } from "./defaults";
 import { RevenueChart } from "./revenue-chart";
@@ -57,12 +58,42 @@ interface NumberFieldProps {
   max?: number;
   step?: number;
   optional?: boolean;
+  /** Money field: shows an R$ prefix and live pt-BR thousand grouping. */
+  currency?: boolean;
 }
 
-function NumberField({ id, label, value, onChange, error, suffix, hint, min, max, step = 1, optional }: NumberFieldProps) {
+function NumberField({ id, label, value, onChange, error, suffix, hint, min, max, step = 1, optional, currency }: NumberFieldProps) {
+  // Local text state only drives the currency variant; a plain field ignores it.
+  const [text, setText] = useState(() => formatCurrencyValue(value));
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setText(formatCurrencyValue(value));
+  }, [value]);
+  const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
   return (
     <div className={styles.field}>
       <label htmlFor={id}>{label} {optional && <span>· opcional</span>}</label>
+      {currency ? (
+        <div className={styles.moneyInput}>
+          <span aria-hidden="true">R$</span>
+          <input
+            id={id}
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={text}
+            onChange={(event) => {
+              const next = formatCurrencyInput(event.target.value);
+              setText(next.text);
+              onChange(next.value);
+            }}
+            onFocus={() => { focused.current = true; }}
+            onBlur={() => { focused.current = false; setText(formatCurrencyValue(value)); }}
+            aria-invalid={Boolean(error)}
+            aria-describedby={describedBy}
+          />
+        </div>
+      ) : (
       <input
         id={id}
         type="number"
@@ -73,8 +104,9 @@ function NumberField({ id, label, value, onChange, error, suffix, hint, min, max
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}
         aria-invalid={Boolean(error)}
-        aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
+        aria-describedby={describedBy}
       />
+      )}
       {suffix && <small>{suffix}</small>}
       {hint && !error && <small id={`${id}-hint`}>{hint}</small>}
       {error && <span className={styles.error} id={`${id}-error`}>{error}</span>}
@@ -278,7 +310,7 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
         <div className={styles.revenueLayout}>
           <div>
             <div className={styles.yearFields}>
-              {draft.revenue.years.map((value, index) => <NumberField key={index} id={`revenue-${index}`} label={`Ano ${index + 1}`} value={value} min={0} onChange={(nextValue) => setDraft((current) => { const years = [...current.revenue.years] as ValuationWizardDraft["revenue"]["years"]; years[index] = nextValue ?? 0; return { ...current, revenue: { ...current.revenue, years } }; })} suffix={draft.revenue.cadence === "annual" ? "R$ por ano" : "R$ médios por mês"} />)}
+              {draft.revenue.years.map((value, index) => <NumberField key={index} id={`revenue-${index}`} label={`Ano ${index + 1}`} value={value} min={0} onChange={(nextValue) => setDraft((current) => { const years = [...current.revenue.years] as ValuationWizardDraft["revenue"]["years"]; years[index] = nextValue ?? 0; return { ...current, revenue: { ...current.revenue, years } }; })} currency suffix={draft.revenue.cadence === "annual" ? "por ano" : "média por mês"} />)}
             </div>
             {errors["revenue.years"] && <span className={styles.error}>{errors["revenue.years"]}</span>}
             <p className={styles.notice}>A periodicidade fica registrada no cenário. A receita anual é distribuída uniformemente pelos 12 meses; valores mensais são repetidos em cada mês do ano.</p>
@@ -290,12 +322,12 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
 
     if (step === 2) {
       const costs: [OperatingCostKey, string][] = [["administrative", "Administrativo"], ["salesMarketing", "Vendas e marketing"], ["headcount", "Pessoas / folha"], ["general", "Despesas gerais"], ["infrastructure", "Infraestrutura"], ["capex", "CAPEX"], ["other", "Outros"]];
-      return <><div className={styles.grid3}>{costs.map(([key, label]) => <NumberField key={key} id={`cost-${key}`} label={label} value={draft.operatingCosts[key]} min={0} onChange={(value) => updateCost(key, value ?? 0)} suffix="R$ por ano · repetidos nos cinco anos" />)}</div>{errors.operatingCosts && <span className={styles.error}>{errors.operatingCosts}</span>}<div className={styles.simpleTranslation}><strong>OPEX anual: {money.format(totalAnnualCosts)} · CAPEX anual: {money.format(draft.operatingCosts.capex)}</strong><p>Os dois valores são tratados separadamente. Sem trajetória própria de custos, permanecem nominais constantes em todos os anos.</p></div></>;
+      return <><div className={styles.grid3}>{costs.map(([key, label]) => <NumberField key={key} id={`cost-${key}`} label={label} value={draft.operatingCosts[key]} min={0} onChange={(value) => updateCost(key, value ?? 0)} currency suffix="por ano · repetidos nos cinco anos" />)}</div>{errors.operatingCosts && <span className={styles.error}>{errors.operatingCosts}</span>}<div className={styles.simpleTranslation}><strong>OPEX anual: {money.format(totalAnnualCosts)} · CAPEX anual: {money.format(draft.operatingCosts.capex)}</strong><p>Os dois valores são tratados separadamente. Sem trajetória própria de custos, permanecem nominais constantes em todos os anos.</p></div></>;
     }
 
     if (step === 3) {
       const saasLike = draft.company.businessModel === "saas";
-      return <><div className={styles.grid3}>{saasLike && <><NumberField id="metric-arr" label="ARR" optional value={draft.metrics.arr} min={0} onChange={(value) => updateMetric("arr", value)} suffix="Receita recorrente anual em R$" /><NumberField id="metric-mrr" label="MRR" optional value={draft.metrics.mrr} min={0} onChange={(value) => updateMetric("mrr", value)} suffix="Receita recorrente mensal em R$" /><NumberField id="metric-churn" label="Churn mensal" optional value={draft.metrics.churnMonthly} min={0} max={100} step={0.1} onChange={(value) => updateMetric("churnMonthly", value)} suffix="% por mês" /></>}<NumberField id="metric-gross-margin" label="Margem bruta usada no DCF" error={errors["metrics.grossMargin"]} value={draft.metrics.grossMargin} min={0} max={100} step={0.1} onChange={(value) => updateMetric("grossMargin", value)} suffix="% da receita" /><NumberField id="metric-cac" label="CAC" optional value={draft.metrics.cac} min={0} onChange={(value) => updateMetric("cac", value)} suffix="R$ por cliente adquirido" /><NumberField id="metric-ltv" label="LTV" optional value={draft.metrics.ltv} min={0} onChange={(value) => updateMetric("ltv", value)} suffix="R$ por cliente" /><NumberField id="metric-burn" label="Burn mensal" optional value={draft.metrics.burnMonthly} min={0} onChange={(value) => updateMetric("burnMonthly", value)} suffix="R$ consumidos por mês" /><NumberField id="metric-runway" label="Runway" optional value={draft.metrics.runwayMonths} min={0} onChange={(value) => updateMetric("runwayMonths", value)} suffix="meses" /><NumberField id="metric-cash" label="Caixa atual" value={draft.metrics.cash} min={0} onChange={(value) => updateMetric("cash", value ?? 0)} suffix="R$" /><NumberField id="metric-debt" label="Dívida financeira" value={draft.metrics.debt} min={0} onChange={(value) => updateMetric("debt", value ?? 0)} suffix="R$" /></div>{errors.metrics && <span className={styles.error}>{errors.metrics}</span>}<p className={styles.notice}>Os demais indicadores são opcionais. A margem bruta é necessária para calcular o fluxo de caixa sem assumir custos diretos ausentes.</p></>;
+      return <><div className={styles.grid3}>{saasLike && <><NumberField id="metric-arr" label="ARR" optional value={draft.metrics.arr} min={0} onChange={(value) => updateMetric("arr", value)} currency suffix="receita recorrente anual" /><NumberField id="metric-mrr" label="MRR" optional value={draft.metrics.mrr} min={0} onChange={(value) => updateMetric("mrr", value)} currency suffix="receita recorrente mensal" /><NumberField id="metric-churn" label="Churn mensal" optional value={draft.metrics.churnMonthly} min={0} max={100} step={0.1} onChange={(value) => updateMetric("churnMonthly", value)} suffix="% por mês" /></>}<NumberField id="metric-gross-margin" label="Margem bruta usada no DCF" error={errors["metrics.grossMargin"]} value={draft.metrics.grossMargin} min={0} max={100} step={0.1} onChange={(value) => updateMetric("grossMargin", value)} suffix="% da receita" /><NumberField id="metric-cac" label="CAC" optional value={draft.metrics.cac} min={0} onChange={(value) => updateMetric("cac", value)} currency suffix="por cliente adquirido" /><NumberField id="metric-ltv" label="LTV" optional value={draft.metrics.ltv} min={0} onChange={(value) => updateMetric("ltv", value)} currency suffix="por cliente" /><NumberField id="metric-burn" label="Burn mensal" optional value={draft.metrics.burnMonthly} min={0} onChange={(value) => updateMetric("burnMonthly", value)} currency suffix="consumidos por mês" /><NumberField id="metric-runway" label="Runway" optional value={draft.metrics.runwayMonths} min={0} onChange={(value) => updateMetric("runwayMonths", value)} suffix="meses" /><NumberField id="metric-cash" label="Caixa atual" value={draft.metrics.cash} min={0} onChange={(value) => updateMetric("cash", value ?? 0)} currency /><NumberField id="metric-debt" label="Dívida financeira" value={draft.metrics.debt} min={0} onChange={(value) => updateMetric("debt", value ?? 0)} currency /></div>{errors.metrics && <span className={styles.error}>{errors.metrics}</span>}<p className={styles.notice}>Os demais indicadores são opcionais. A margem bruta é necessária para calcular o fluxo de caixa sem assumir custos diretos ausentes.</p></>;
     }
 
     if (step === 4) return draft.mode === "simple" ? (
@@ -305,12 +337,12 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
           ["equilibrado", "Risco intermediário", "Premissa inicial recomendada", 25, 40],
           ["maduro", "Maior previsibilidade", "Operação mais consolidada", 18, 30],
         ].map(([id, label, description, wacc, targetReturn]) => <button type="button" key={id} className={`${styles.optionButton} ${draft.valuation.wacc === wacc ? styles.selected : ""}`} onClick={() => setDraft((current) => ({ ...current, valuation: { ...current.valuation, wacc: Number(wacc), vcTargetReturn: Number(targetReturn) } }))}><strong>{label}</strong><small>{description}</small></button>)}</div></section>
-        <section className={styles.sectionBlock}><h3>Rodada e horizonte</h3><div className={styles.grid3}><NumberField id="investment" label="Investimento considerado" value={draft.valuation.investmentAmount} min={0} onChange={(value) => updateValuation("investmentAmount", value ?? 0)} suffix="R$" /><NumberField id="ownership" label="Participação desejada" value={draft.valuation.targetOwnership} min={0} max={100} step={0.1} onChange={(value) => updateValuation("targetOwnership", value ?? 0)} suffix="% após o investimento" error={errors["valuation.targetOwnership"]} /><NumberField id="horizon" label="Horizonte de saída" value={draft.valuation.investmentHorizonYears} min={1} max={15} onChange={(value) => updateValuation("investmentHorizonYears", value ?? 5)} suffix="anos" /></div></section>
+        <section className={styles.sectionBlock}><h3>Rodada e horizonte</h3><div className={styles.grid3}><NumberField id="investment" label="Investimento considerado" value={draft.valuation.investmentAmount} min={0} onChange={(value) => updateValuation("investmentAmount", value ?? 0)} currency /><NumberField id="ownership" label="Participação desejada" value={draft.valuation.targetOwnership} min={0} max={100} step={0.1} onChange={(value) => updateValuation("targetOwnership", value ?? 0)} suffix="% após o investimento" error={errors["valuation.targetOwnership"]} /><NumberField id="horizon" label="Horizonte de saída" value={draft.valuation.investmentHorizonYears} min={1} max={15} onChange={(value) => updateValuation("investmentHorizonYears", value ?? 5)} suffix="anos" /></div></section>
         <div className={styles.simpleTranslation}><strong>Tradução das premissas: WACC {draft.valuation.wacc}% · retorno-alvo VC {draft.valuation.vcTargetReturn}% a.a.</strong><p>No modo simples o valor terminal é uma perpetuidade com crescimento de {draft.valuation.terminalGrowth}% e as premissas de valuation são fixas; o múltiplo de saída de {draft.valuation.exitMultiple}x alimenta o VC Method. Troque para o modo profissional para usar múltiplo terminal ou faixas de incerteza.</p></div>
       </>
     ) : (
       <>
-      <div className={styles.grid3}><NumberField id="wacc" label="WACC" value={draft.valuation.wacc} min={0.01} max={100} step={0.1} onChange={(value) => updateValuation("wacc", value ?? 0)} suffix="% ao ano" error={errors["valuation.wacc"]} />{draft.valuation.terminalMethod === "gordon" && <NumberField id="terminal-growth" label="Crescimento terminal (g)" value={draft.valuation.terminalGrowth} step={0.1} onChange={(value) => updateValuation("terminalGrowth", value ?? 0)} suffix="% ao ano · deve ser menor que WACC" error={errors["valuation.terminalGrowth"]} />}<NumberField id="vc-return" label="Retorno-alvo VC" value={draft.valuation.vcTargetReturn} min={0.1} step={0.1} onChange={(value) => updateValuation("vcTargetReturn", value ?? 0)} suffix="% ao ano" error={errors["valuation.vcTargetReturn"]} /><NumberField id="exit-multiple" label="Múltiplo de saída (VC Method)" value={draft.valuation.exitMultiple} min={0.1} step={0.1} onChange={(value) => updateValuation("exitMultiple", value ?? 0)} suffix="x receita do Ano 5 · usado no VC Method" error={errors["valuation.exitMultiple"]} /><NumberField id="investment" label="Investimento" value={draft.valuation.investmentAmount} min={0} onChange={(value) => updateValuation("investmentAmount", value ?? 0)} suffix="R$" /><NumberField id="ownership" label="Participação-alvo" value={draft.valuation.targetOwnership} min={0} max={100} step={0.1} onChange={(value) => updateValuation("targetOwnership", value ?? 0)} suffix="% post-money" error={errors["valuation.targetOwnership"]} /><NumberField id="horizon" label="Horizonte de saída" value={draft.valuation.investmentHorizonYears} min={1} max={15} onChange={(value) => updateValuation("investmentHorizonYears", value ?? 5)} suffix="anos" /></div>
+      <div className={styles.grid3}><NumberField id="wacc" label="WACC" value={draft.valuation.wacc} min={0.01} max={100} step={0.1} onChange={(value) => updateValuation("wacc", value ?? 0)} suffix="% ao ano" error={errors["valuation.wacc"]} />{draft.valuation.terminalMethod === "gordon" && <NumberField id="terminal-growth" label="Crescimento terminal (g)" value={draft.valuation.terminalGrowth} step={0.1} onChange={(value) => updateValuation("terminalGrowth", value ?? 0)} suffix="% ao ano · deve ser menor que WACC" error={errors["valuation.terminalGrowth"]} />}<NumberField id="vc-return" label="Retorno-alvo VC" value={draft.valuation.vcTargetReturn} min={0.1} step={0.1} onChange={(value) => updateValuation("vcTargetReturn", value ?? 0)} suffix="% ao ano" error={errors["valuation.vcTargetReturn"]} /><NumberField id="exit-multiple" label="Múltiplo de saída (VC Method)" value={draft.valuation.exitMultiple} min={0.1} step={0.1} onChange={(value) => updateValuation("exitMultiple", value ?? 0)} suffix="x receita do Ano 5 · usado no VC Method" error={errors["valuation.exitMultiple"]} /><NumberField id="investment" label="Investimento" value={draft.valuation.investmentAmount} min={0} onChange={(value) => updateValuation("investmentAmount", value ?? 0)} currency /><NumberField id="ownership" label="Participação-alvo" value={draft.valuation.targetOwnership} min={0} max={100} step={0.1} onChange={(value) => updateValuation("targetOwnership", value ?? 0)} suffix="% post-money" error={errors["valuation.targetOwnership"]} /><NumberField id="horizon" label="Horizonte de saída" value={draft.valuation.investmentHorizonYears} min={1} max={15} onChange={(value) => updateValuation("investmentHorizonYears", value ?? 5)} suffix="anos" /></div>
       <section className={styles.professionalBox} aria-labelledby="terminal-heading">
         <p id="terminal-heading">VALOR TERMINAL E INCERTEZA DAS PREMISSAS DE VALUATION</p>
         <div className={styles.grid3}>
