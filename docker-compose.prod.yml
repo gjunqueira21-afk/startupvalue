@@ -72,6 +72,9 @@ services:
 
   redis:
     restart: unless-stopped
+    # Run as the redis user: with every capability dropped, root cannot write
+    # the redis-owned /data volume (no DAC_OVERRIDE), but uid 999 owns it.
+    user: "999:999"
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
