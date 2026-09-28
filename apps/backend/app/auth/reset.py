@@ -54,7 +54,7 @@ def send_reset_email(email: str, token: str) -> bool:
     message = EmailMessage()
     message["From"] = settings.smtp_from_email
     message["To"] = email
-    message["Subject"] = "Recuperação de senha — StartupValue"
+    message["Subject"] = "Recuperação de senha — QuantoVale"
     message.set_content(
         "Recebemos uma solicitação para redefinir sua senha.\n\n"
         f"Abra este link em até 30 minutos:\n{link}\n\n"

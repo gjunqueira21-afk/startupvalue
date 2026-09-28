@@ -173,7 +173,7 @@ def executive_summary_blocks(data: ReportData, styles: dict[str, ParagraphStyle]
         gap(GAP_XS),
         Paragraph(
             "Faixa simulada de P10 a P90 · barra verde: faixa central P25–P75 · traço: "
-            f"mediana (P50) · Fonte: StartupValue SimulationResult · "
+            f"mediana (P50) · Fonte: QuantoVale SimulationResult · "
             f"{escape(data.audit.simulation_id[:12])}",
             styles["caption"],
         ),

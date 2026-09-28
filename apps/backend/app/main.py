@@ -15,7 +15,7 @@ if settings.app_env.lower() in {"production", "staging"} and (
     settings.csrf_secret is None or len(settings.csrf_secret) < 32
 ):
     raise RuntimeError("CSRF_SECRET must contain at least 32 characters")
-app = FastAPI(title="StartupValue API", version="0.1.0", docs_url="/api/docs")
+app = FastAPI(title="QuantoVale API", version="0.1.0", docs_url="/api/docs")
 app.middleware("http")(csrf_guard)
 app.add_middleware(
     CORSMiddleware,

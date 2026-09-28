@@ -4,8 +4,8 @@ import "./result-enhancements.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "StartupValue — Valuation Intelligence for Startups",
-    template: "%s — StartupValue",
+    default: "QuantoVale — Quanto vale a sua empresa",
+    template: "%s — QuantoVale",
   },
   description:
     "Transforme projeções financeiras em uma distribuição probabilística de valuation com Monte Carlo, DCF e Venture Capital Method.",

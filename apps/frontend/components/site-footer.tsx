@@ -7,7 +7,7 @@ export function SiteFooter() {
       <div className="container footer-grid">
         <div className="footer-brand">
           <Brand />
-          <p>Valuation Intelligence for Startups.</p>
+          <p>Valuation inteligente para a sua empresa.</p>
           <p className="fine-print">Estimativas condicionadas às premissas informadas. Não constituem recomendação de investimento.</p>
         </div>
         <div>
@@ -30,7 +30,7 @@ export function SiteFooter() {
         </div>
       </div>
       <div className="container footer-bottom">
-        <span>© 2026 StartupValue</span>
+        <span>© 2026 QuantoVale</span>
         <span>Transparência · Probabilidade · Decisão</span>
       </div>
     </footer>

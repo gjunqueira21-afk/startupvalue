@@ -44,7 +44,7 @@ GAP_S = 3 * mm
 GAP_M = 5 * mm
 GAP_L = 8 * mm
 
-SOURCE = "StartupValue SimulationResult"
+SOURCE = "QuantoVale SimulationResult"
 
 
 def span(columns: int) -> float:

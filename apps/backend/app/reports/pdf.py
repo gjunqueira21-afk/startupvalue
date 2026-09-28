@@ -361,10 +361,10 @@ def _document(
         rightMargin=PAGE_MARGIN_X,
         topMargin=PAGE_MARGIN_TOP,
         bottomMargin=PAGE_MARGIN_BOTTOM,
-        title=f"StartupValue - {data.company.name}",
-        author="StartupValue",
+        title=f"QuantoVale - {data.company.name}",
+        author="QuantoVale",
         subject="Valuation & Monte Carlo Analysis",
-        creator=f"StartupValue report template {data.audit.report_template_version}",
+        creator=f"QuantoVale report template {data.audit.report_template_version}",
     )
     frame = Frame(
         document.leftMargin,

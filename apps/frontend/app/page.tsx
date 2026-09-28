@@ -10,7 +10,7 @@ import { SiteHeader } from "@/components/site-header";
 const futuresSummary = buildFuturesSummary();
 
 const steps = [
-  ["01", "Informe sua startup", "Contexto, estágio e modelo de negócio."],
+  ["01", "Descreva sua empresa", "Contexto, estágio e modelo de negócio."],
   ["02", "Defina suas premissas", "Receita, operação, retorno e incerteza."],
   ["03", "Simule milhares de futuros", "Trajetórias reproduzíveis, com seed e versão."],
   ["04", "Analise distribuição e risco", "Percentis, caudas e breakeven no horizonte."],
@@ -26,8 +26,8 @@ const methods = [
 
 const plans = [
   { name: "Free", eyebrow: "Para começar", description: "Construa uma primeira tese com transparência.", items: ["1 empresa", "1.000 cenários", "DCF e VC Method", "Resumo com marca d'água"] },
-  { name: "Pro", eyebrow: "Para founders e CFOs", description: "Compare premissas e prepare decisões de captação.", items: ["Até 5 empresas", "Até 10.000 cenários", "Decision Intelligence", "Relatório profissional"], featured: true },
-  { name: "Advisor / VC", eyebrow: "Para portfólios", description: "Organize análises de múltiplos clientes e teses.", items: ["Workspaces de clientes", "Até 25.000 cenários", "Comparação completa", "Relatórios por cliente"] },
+  { name: "Pro", eyebrow: "Para donos de empresa e CFOs", description: "Compare premissas e prepare negociações e captações.", items: ["Até 5 empresas", "Até 10.000 cenários", "Decision Intelligence", "Relatório profissional"], featured: true },
+  { name: "Advisor", eyebrow: "Para escritórios e portfólios", description: "Organize análises de múltiplos clientes e teses.", items: ["Workspaces de clientes", "Até 25.000 cenários", "Comparação completa", "Relatórios por cliente"] },
 ];
 
 export default function HomePage() {
@@ -41,11 +41,11 @@ export default function HomePage() {
             <div className="hero-scroll-cue" aria-hidden="true"><span>SCROLL</span><i /></div>
           </div>
           <div className="container hero-copy">
-            <p className="eyebrow"><span /> VALUATION INTELLIGENCE FOR STARTUPS</p>
-            <h1>Não existe um único futuro para uma startup. <em>Nós calculamos milhares deles.</em></h1>
-            <p className="hero-subtitle">Transforme projeções financeiras em uma distribuição probabilística de valuation através de Monte Carlo, DCF e Venture Capital Method.</p>
+            <p className="eyebrow"><span /> VALUATION INTELIGENTE PARA EMPRESAS</p>
+            <h1>Não existe um único futuro para uma empresa. <em>Nós calculamos milhares deles.</em></h1>
+            <p className="hero-subtitle">Descubra quanto vale a sua empresa: os números do negócio viram uma distribuição probabilística de valor, com milhares de cenários e premissas transparentes.</p>
             <div className="button-row">
-              <Link className="button button-primary" href="/signup">Calcular minha startup <ArrowUpRight /></Link>
+              <Link className="button button-primary" href="/signup">Calcular minha empresa <ArrowUpRight /></Link>
               <Link className="button button-secondary" href="#como-funciona">Ver como funciona <ArrowRight /></Link>
             </div>
             <div className="trust-row" aria-label="Princípios do produto">
@@ -67,7 +67,7 @@ export default function HomePage() {
             <p className="section-index">01 — A TESE</p>
             <div>
               <h2>Um valuation não deveria ser <span>apenas um número.</span></h2>
-              <p>Startups operam sob incerteza. Receita, crescimento, margem, custos e retorno esperado não acontecem exatamente como planejado. Por isso, o StartupValue simula milhares de futuros possíveis.</p>
+              <p>Empresas operam sob incerteza. Receita, crescimento, margem, custos e retorno esperado não acontecem exatamente como planejado. Por isso, o QuantoVale simula milhares de futuros possíveis.</p>
             </div>
           </div>
           <div className="container thesis-comparison">
@@ -76,7 +76,7 @@ export default function HomePage() {
             </article>
             <div className="comparison-arrow" aria-hidden="true"><ArrowRight /></div>
             <article className="comparison-card new-model">
-              <p>STARTUPVALUE</p><span>10.000 possíveis futuros.</span>
+              <p>QUANTOVALE</p><span>10.000 possíveis futuros.</span>
               <div className="range-line"><i /><b /><i /></div>
               <div className="range-values"><small>P25 · R$ 6,1 mi</small><strong>P50 · R$ 8,4 mi</strong><small>P75 · R$ 11,7 mi</small></div>
             </article>
@@ -86,7 +86,7 @@ export default function HomePage() {
         <section className="how-section section-grid" id="como-funciona">
           <div className="container section-heading">
             <div><p className="section-index">02 — COMO FUNCIONA</p><h2>Da projeção à decisão,<br /><span>sem caixa-preta.</span></h2></div>
-            <p>Um fluxo guiado para founders. Controle granular para profissionais.</p>
+            <p>Um fluxo guiado para quem é do negócio. Controle granular para profissionais.</p>
           </div>
           <div className="container steps-grid">
             {steps.map(([number, title, text]) => <article className="step-card" key={number}><span>{number}</span><h3>{title}</h3><p>{text}</p></article>)}
@@ -131,7 +131,7 @@ export default function HomePage() {
         <section className="audience-section">
           <div className="container section-heading"><div><p className="section-index">05 — PARA QUEM</p><h2>Uma linguagem comum para<br /><span>quem constrói e quem investe.</span></h2></div></div>
           <div className="container audience-grid">
-            {[['Founders', 'Prepare rodadas e discuta faixas de valor com premissas visíveis.'], ['Investidores', 'Avalie teses, risco e sensibilidade com rastreabilidade.'], ['Advisors', 'Estruture análises institucionais para múltiplos clientes.'], ['VCs & CVCs', 'Compare cenários e documente hipóteses para comitês.']].map(([title, text], index) => <article key={title}><span>0{index + 1}</span><h3>{title}</h3><p>{text}</p></article>)}
+            {[['Donos de empresa', 'Saiba quanto vale o seu negócio e negocie com premissas visíveis.'], ['Investidores', 'Avalie oportunidades, risco e sensibilidade com rastreabilidade.'], ['Contadores & Consultores', 'Estruture análises de valuation para múltiplos clientes.'], ['Compradores & Sócios', 'Avalie aquisições, entradas e saídas de sociedade com hipóteses documentadas.']].map(([title, text], index) => <article key={title}><span>0{index + 1}</span><h3>{title}</h3><p>{text}</p></article>)}
           </div>
         </section>
 
@@ -149,7 +149,7 @@ export default function HomePage() {
           <div className="container faq-grid">
             <div><p className="section-index">07 — FAQ</p><h2>Perguntas<br /><span>frequentes.</span></h2></div>
             <div className="faq-list">
-              <details open><summary>O StartupValue informa o valor “correto” da empresa?</summary><p>Não. O produto estima uma distribuição condicionada às projeções, premissas e mecanismos escolhidos. O resultado apoia decisões; não é uma verdade objetiva ou garantia de preço.</p></details>
+              <details open><summary>O QuantoVale informa o valor “correto” da empresa?</summary><p>Não. O produto estima uma distribuição condicionada às projeções, premissas e mecanismos escolhidos. O resultado apoia decisões; não é uma verdade objetiva ou garantia de preço.</p></details>
               <details><summary>Mais simulações tornam a projeção mais precisa?</summary><p>Mais cenários reduzem o erro numérico de Monte Carlo, mas não corrigem premissas econômicas inadequadas. Qualidade dos inputs e transparência do modelo continuam essenciais.</p></details>
               <details><summary>Qual a diferença entre DCF e VC Method?</summary><p>O DCF desconta fluxos futuros e valor terminal. O VC Method parte de um valor de saída e do retorno-alvo do investidor. As bases são exibidas separadamente.</p></details>
               <details><summary>Meus resultados podem ser reproduzidos?</summary><p>Sim. Resultados persistidos identificam inputs, versão do modelo, seed aleatória e número de simulações.</p></details>

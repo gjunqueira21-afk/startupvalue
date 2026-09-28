@@ -12,7 +12,7 @@ export default function ForgotPasswordPage() {
         <div className="auth-copy">
           <p className="eyebrow"><span /> ACESSO SEGURO</p>
           <h1>Retome sua análise com segurança.</h1>
-          <p>Solicite um link temporário para criar uma nova senha da sua conta StartupValue.</p>
+          <p>Solicite um link temporário para criar uma nova senha da sua conta QuantoVale.</p>
         </div>
         <p className="auth-panel-footer">O link expira em 30 minutos e pode ser usado uma única vez.</p>
       </section>

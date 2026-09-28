@@ -107,7 +107,7 @@ function DashboardContent({ session, dashboard }: { session: SessionResponse; da
             {latest ? (
               <><span>{latest.startup_name.toUpperCase()} · {latest.scenario_name.toUpperCase()}</span><strong>Explore a distribuição de valuation.</strong><p>Revise percentis, risco e as premissas utilizadas nesta simulação.</p><Link href={`/app/simulations/${latest.simulation_id}`}>Abrir resultado <ArrowRight /></Link></>
             ) : (
-              <><span>STARTUPVALUE</span><strong>Crie seu primeiro cenário.</strong><p>O resultado ficará salvo na sua conta e poderá ser aberto novamente depois do login.</p><Link href="/app/companies/new">Iniciar <ArrowRight /></Link></>
+              <><span>QUANTOVALE</span><strong>Crie seu primeiro cenário.</strong><p>O resultado ficará salvo na sua conta e poderá ser aberto novamente depois do login.</p><Link href="/app/companies/new">Iniciar <ArrowRight /></Link></>
             )}
           </div>
         </article>
