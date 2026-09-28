@@ -52,15 +52,19 @@ const GREEN = new Color("#35e6a1");
 const BLUE = new Color("#5ca7ff");
 const RED = new Color("#ff6b78");
 
-const INTRO_SECONDS = 3.4;
+// The intro plays in two acts: the sweep draws every trajectory left-to-right until the
+// valuation histogram forms, then the failing futures turn red and plunge to the floor.
+const SWEEP_SECONDS = 3.6;
+const FALL_SECONDS = 1.4;
 
 const ARIA_LABEL =
-  "Visualização 3D ilustrativa: milhares de trajetórias simuladas de valuation partem de hoje e se abrem em leque ao longo de cinco anos, formando um histograma de 100 cubos, cada um representando 100 cenários. A mediana, a faixa P25–P75 e os percentis P10 e P90 estão destacados; trajetórias em vermelho terminam em falência.";
+  "Visualização 3D ilustrativa: milhares de trajetórias simuladas de valuation partem de hoje e se abrem em leque ao longo de cinco anos, formando um histograma de 100 cubos, cada um representando 100 cenários. A mediana, a faixa P25–P75 e os percentis P10 e P90 estão destacados; trajetórias em vermelho despencam até o chão ao terminar em falência. Arraste horizontalmente para girar a visualização.";
 
 /* ------------------------------------------------------------------ shaders */
 const PATH_VERT = /* glsl */ `
-  attribute vec3 aData; // t (0..1 along the horizon), seed, failure weight (0 healthy .. 1 failing)
+  attribute vec3 aData; // t (0..1 along the horizon; drop progress on plunges), seed, kind (0..1 failure weight, 2 = plunge)
   uniform float uReveal;
+  uniform float uFall;
   uniform float uTime;
   uniform vec3 uGreen;
   uniform vec3 uBlue;
@@ -73,27 +77,35 @@ const PATH_VERT = /* glsl */ `
     float t = aData.x;
     float seed = aData.y;
     float kind = aData.z;
+    float isFall = step(1.5, kind);
+    float w = mix(min(kind, 1.0), 1.0, isFall);
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mv;
 
+    // act 1: trajectories sweep left-to-right; act 2: plunge segments are revealed top-down
     float head = uReveal * 1.3 - seed * 0.3;
-    float shown = clamp((head - t) * 16.0, 0.0, 1.0);
-    float tip = exp(-pow((head - t) * 16.0, 2.0)) * (1.0 - smoothstep(1.0, 1.25, uReveal));
+    float fallHead = uFall * 1.5 - seed * 0.35;
+    float shown = mix(clamp((head - t) * 16.0, 0.0, 1.0), clamp((fallHead - t) * 6.0, 0.0, 1.0), isFall);
+    float tip = exp(-pow((head - t) * 16.0, 2.0)) * (1.0 - smoothstep(1.0, 1.25, uReveal)) * (1.0 - isFall);
+    float fallTip = isFall * exp(-pow((fallHead - t) * 6.0, 2.0)) * (1.0 - smoothstep(0.86, 1.0, uFall));
 
     // Slow travelling pulses on roughly a quarter of the paths: futures "flowing".
     float cycle = fract(uTime * 0.045 + seed * 5.731);
-    float pulse = exp(-pow((t - (cycle * 1.9 - 0.45)) * 11.0, 2.0)) * step(fract(seed * 17.13), 0.26);
+    float pulse = exp(-pow((t - (cycle * 1.9 - 0.45)) * 11.0, 2.0)) * step(fract(seed * 17.13), 0.26) * (1.0 - isFall);
 
     vec3 color = mix(uBlue, uGreen, smoothstep(0.0, 0.42, t));
     // thousands of paths share the origin: keep it from saturating
     float alpha = mix(0.045, 0.085, fract(seed * 3.7)) * (0.06 + 0.94 * smoothstep(0.0, 0.34, t)) * uBoost;
-    // failing futures look like any other until their last months, then turn red
-    color = mix(color, uRed, kind);
-    alpha = mix(alpha, 0.22, kind);
-    pulse *= 1.0 - kind;
+    // failing futures look like any other during the sweep; they blush red as act 2 begins
+    float redW = w * mix(clamp(uFall * 3.0, 0.0, 1.0), 1.0, isFall);
+    color = mix(color, uRed, redW);
+    alpha = mix(alpha, 0.22, redW);
+    alpha = mix(alpha, 0.3, isFall);
+    pulse *= 1.0 - w;
     float glow = clamp(pulse * 0.55 + tip * 0.7, 0.0, 1.0);
     color = mix(color, vec3(0.86, 1.0, 0.95), glow * 0.6);
-    alpha += pulse * 0.32 + tip * 0.45;
+    color = mix(color, vec3(1.0, 0.84, 0.87), fallTip * 0.55);
+    alpha += pulse * 0.32 + tip * 0.45 + fallTip * 0.5;
 
     float depth = -mv.z;
     float fade = smoothstep(uFar, uNear, depth);
@@ -112,6 +124,7 @@ const COLOR_FRAG = /* glsl */ `
 const POINT_VERT = /* glsl */ `
   attribute vec3 aData; // t at which the point appears, seed, kind
   uniform float uReveal;
+  uniform float uFall;
   uniform float uPixelRatio;
   uniform float uSize;
   uniform vec3 uGreen;
@@ -120,11 +133,13 @@ const POINT_VERT = /* glsl */ `
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mv;
-    float head = uReveal * 1.3 - aData.y * 0.3;
+    float isFail = step(0.5, aData.z);
+    // survivor dots land with the sweep; failure dots only once their plunge touches the floor
+    float head = mix(uReveal * 1.3 - aData.y * 0.3, uFall * 1.5 - aData.y * 0.35, isFail);
     float shown = clamp((head - aData.x) * 10.0, 0.0, 1.0);
-    gl_PointSize = uSize * uPixelRatio * (aData.z > 0.5 ? 1.25 : 1.0);
-    vec3 color = aData.z > 0.5 ? uRed : mix(uGreen, vec3(0.85, 1.0, 0.95), 0.35);
-    vColor = vec4(color, shown * (aData.z > 0.5 ? 0.6 : 0.5));
+    gl_PointSize = uSize * uPixelRatio * (isFail > 0.5 ? 1.25 : 1.0);
+    vec3 color = isFail > 0.5 ? uRed : mix(uGreen, vec3(0.85, 1.0, 0.95), 0.35);
+    vColor = vec4(color, shown * (isFail > 0.5 ? 0.6 : 0.5));
   }
 `;
 
@@ -294,7 +309,7 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     };
 
     /* ---------------- paths */
-    const pathCount = lite ? 420 : 1300;
+    const pathCount = lite ? 480 : 1500;
     const data = buildFuturesPaths(pathCount, summary.rawKnots);
     const stride = STEPS + 1;
     const seeds = new Float32Array(pathCount);
@@ -337,7 +352,8 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
         s = n;
       }
       if (fail >= 0) {
-        // plunge: curved drop to the "R$ 0" floor over ~2 months
+        // plunge: curved drop to the "R$ 0" floor; t carries the drop progress so act 2
+        // can reveal it top-down (kind = 2 marks these segments for the shader)
         const x = worldX(last);
         const y = worldY(data.logV[base + last]);
         const z = data.z[base + last];
@@ -347,13 +363,13 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
           const f = k / 4;
           const nx = x + f * 0.17;
           const ny = y + (WORLD.floor - y) * f * f;
-          push(px, py, z, (px - WORLD.x0) / X_SPAN, seeds[i], 1);
-          push(nx, ny, z, (nx - WORLD.x0) / X_SPAN, seeds[i], 1);
+          push(px, py, z, (k - 1) / 4, seeds[i], 2);
+          push(nx, ny, z, f, seeds[i], 2);
           px = nx;
           py = ny;
         }
         endPositions.push(px, WORLD.floor, z);
-        endData.push((px - WORLD.x0) / X_SPAN, seeds[i], 1);
+        endData.push(1, seeds[i], 1);
       } else {
         endPositions.push(worldX(STEPS), worldY(data.logV[base + STEPS]), data.z[base + STEPS]);
         endData.push(1, seeds[i], 0);
@@ -364,6 +380,7 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     pathGeometry.setAttribute("aData", new BufferAttribute(attrs, 3));
     const pathUniforms = {
       uReveal: { value: 0 },
+      uFall: { value: 0 },
       uTime: { value: 0 },
       uGreen: { value: GREEN },
       uBlue: { value: BLUE },
@@ -380,7 +397,7 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     const endGeometry = track(new BufferGeometry());
     endGeometry.setAttribute("position", new BufferAttribute(new Float32Array(endPositions), 3));
     endGeometry.setAttribute("aData", new BufferAttribute(new Float32Array(endData), 3));
-    const pointUniforms = { uReveal: pathUniforms.uReveal, uPixelRatio: { value: dpr }, uSize: { value: lite ? 2.4 : 2.1 }, uGreen: { value: GREEN }, uRed: { value: RED } };
+    const pointUniforms = { uReveal: pathUniforms.uReveal, uFall: pathUniforms.uFall, uPixelRatio: { value: dpr }, uSize: { value: lite ? 2.4 : 2.1 }, uGreen: { value: GREEN }, uRed: { value: RED } };
     const endMaterial = track(
       new ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: pointUniforms, transparent: true, depthWrite: false, blending: AdditiveBlending }),
     );
@@ -448,14 +465,16 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
       tail: new Color("#3f7bc0"),
       failure: new Color("#ff6b78"),
     };
-    type Cube = { slot: Vector3; start: number; color: Color };
+    type Cube = { slot: Vector3; start: number; color: Color; fall: boolean };
     const cubes: Cube[] = [];
     for (const { bin, cubes: n } of summary.cubeBins) {
       const role = cubeRole(bin, bands);
-      for (let k = 0; k < n; k += 1) cubes.push({ slot: new Vector3(...cubeSlot(bin, k)), start: 0.86 + k * 0.035 + bin * 0.004, color: cubeColor[role] });
+      for (let k = 0; k < n; k += 1) cubes.push({ slot: new Vector3(...cubeSlot(bin, k)), start: 0.86 + k * 0.035 + bin * 0.004, color: cubeColor[role], fall: false });
     }
+    const failStagger = 0.4 / Math.max(1, summary.failureCubes - 1 || 1);
     for (let k = 0; k < summary.failureCubes; k += 1) {
-      cubes.push({ slot: new Vector3(...failureCubeSlot(k)), start: 0.8 + k * 0.035, color: cubeColor.failure });
+      // failure cubes belong to act 2: they stack (0.3..0.7 of the fall) as futures hit the floor
+      cubes.push({ slot: new Vector3(...failureCubeSlot(k)), start: 0.3 + k * failStagger, color: cubeColor.failure, fall: true });
     }
     const cubeMesh = new InstancedMesh(cubeGeometry, cubeMaterial, cubes.length);
     cubeMesh.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -469,11 +488,11 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     const matrix = new Matrix4();
     const cubePosition = new Vector3();
     let cubesSettled = false;
-    const updateCubes = (reveal: number) => {
+    const updateCubes = (reveal: number, fall: number) => {
       if (cubesSettled) return;
       let all = true;
       cubes.forEach((cube, index) => {
-        const p = easeOutCubic((reveal - cube.start) / 0.22);
+        const p = easeOutCubic(((cube.fall ? fall : reveal) - cube.start) / (cube.fall ? 0.28 : 0.22));
         if (p < 1) all = false;
         // cubes slide out of the year-5 plane into their stack slot
         cubePosition.set(WORLD.x1 + (cube.slot.x - WORLD.x1) * p, cube.slot.y, cube.slot.z);
@@ -484,7 +503,7 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
       cubeMesh.instanceMatrix.needsUpdate = true;
       cubesSettled = all;
     };
-    updateCubes(0);
+    updateCubes(0, 0);
 
     /* ---------------- camera rig */
     const anchors = labelAnchors(summary);
@@ -498,6 +517,12 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     let height = 1;
     const pointer = { x: 0, y: 0 };
     const eased = { yaw: baseYaw + 0.22, pitch: basePitch + 0.05, dolly: 1.12 };
+    // drag-to-rotate: a clamped yaw offset the user controls; once they grab the scene,
+    // the hover parallax bows out so the chosen angle sticks
+    const dragState = { active: false, id: -1, x0: 0, base: 0 };
+    let yawOffset = 0;
+    let interacted = false;
+    let parallax = 1;
 
     const resize = () => {
       for (const key of Object.keys(labelWidths)) delete labelWidths[key as LabelKey];
@@ -528,8 +553,10 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
         projected.copy(anchorVectors[key]).project(camera);
         let labelWidth = labelWidths[key];
         if (labelWidth === undefined) labelWidth = labelWidths[key] = node.offsetWidth;
-        // keep labels inside the stage (no horizontal overflow on small screens)
-        const x = Math.min((projected.x * 0.5 + 0.5) * width, width - labelWidth - 4);
+        // keep labels inside the stage (no horizontal overflow on either edge; centred
+        // labels — Hoje/Ano 5 — hang half their width to the left of the anchor)
+        const minX = key === "today" || key === "year5" ? labelWidth / 2 + 6 : 6;
+        const x = Math.min(Math.max((projected.x * 0.5 + 0.5) * width, minX), width - labelWidth - 4);
         const y = (-projected.y * 0.5 + 0.5) * height;
         node.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
       });
@@ -550,19 +577,23 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
       last = now;
       elapsed += dt;
 
-      const reveal = Math.min(1.35, easeOutCubic(elapsed / INTRO_SECONDS) * 1.35);
+      const reveal = Math.min(1.35, easeOutCubic(elapsed / SWEEP_SECONDS) * 1.35);
+      const fall = easeInOut((elapsed - SWEEP_SECONDS) / FALL_SECONDS);
       pathUniforms.uReveal.value = reveal;
+      pathUniforms.uFall.value = fall;
       pathUniforms.uTime.value = elapsed;
       flatMaterials.forEach((material) => (material.uniforms.uReveal.value = Math.max(0, reveal - 0.12)));
       gridMaterial.uniforms.uOpacity.value = 0.34 * easeOutCubic(elapsed / 1.2);
       glowUniforms.uOpacity.value = easeOutCubic(elapsed / 0.8) * (0.9 + Math.sin(elapsed * 1.3) * 0.08);
-      updateCubes(reveal);
+      updateCubes(reveal, fall);
 
-      const settle = easeInOut(elapsed / (INTRO_SECONDS + 0.8));
+      const settle = easeInOut(elapsed / (SWEEP_SECONDS + FALL_SECONDS + 0.6));
       const drift = Math.sin(elapsed * 0.11) * 0.045;
       const k = 1 - Math.exp(-dt * 2.4);
-      eased.yaw += (baseYaw + 0.22 * (1 - settle) + pointer.x * 0.16 + drift - eased.yaw) * k;
-      eased.pitch += (basePitch + 0.05 * (1 - settle) - pointer.y * 0.07 + Math.cos(elapsed * 0.09) * 0.012 - eased.pitch) * k;
+      const kYaw = 1 - Math.exp(-dt * (dragState.active ? 9 : 2.4));
+      parallax += ((interacted ? 0 : 1) - parallax) * k;
+      eased.yaw += (baseYaw + 0.22 * (1 - settle) + pointer.x * 0.16 * parallax + drift + yawOffset - eased.yaw) * kYaw;
+      eased.pitch += (basePitch + 0.05 * (1 - settle) - pointer.y * 0.07 * parallax + Math.cos(elapsed * 0.09) * 0.012 - eased.pitch) * k;
       eased.dolly += (1 + 0.12 * (1 - settle) - eased.dolly) * k;
       const r = distance * eased.dolly;
       camera.position.set(
@@ -581,7 +612,7 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
         readySent = true;
         callbacks.current.onReady();
       }
-      if (!introSent && elapsed > INTRO_SECONDS * 0.9) {
+      if (!introSent && elapsed > SWEEP_SECONDS * 0.9) {
         introSent = true;
         callbacks.current.onIntroDone();
       }
@@ -635,6 +666,35 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
       pointer.y = Math.max(-1, Math.min(1, (event.clientY / window.innerHeight) * 2 - 1));
     };
     window.addEventListener("pointermove", onPointer, { passive: true });
+    const onDragStart = (event: PointerEvent) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      dragState.active = true;
+      dragState.id = event.pointerId;
+      dragState.x0 = event.clientX;
+      dragState.base = yawOffset;
+      host.classList.add("is-dragging");
+      try {
+        host.setPointerCapture(event.pointerId);
+      } catch {
+        /* pointer capture is best-effort */
+      }
+    };
+    const onDragMove = (event: PointerEvent) => {
+      if (!dragState.active || event.pointerId !== dragState.id) return;
+      const dx = event.clientX - dragState.x0;
+      if (Math.abs(dx) > 2) interacted = true;
+      yawOffset = Math.max(-0.42, Math.min(0.42, dragState.base - (dx / Math.max(320, width)) * 1.7));
+    };
+    const onDragEnd = (event: PointerEvent) => {
+      if (event.pointerId !== dragState.id) return;
+      dragState.active = false;
+      dragState.id = -1;
+      host.classList.remove("is-dragging");
+    };
+    host.addEventListener("pointerdown", onDragStart);
+    host.addEventListener("pointermove", onDragMove);
+    host.addEventListener("pointerup", onDragEnd);
+    host.addEventListener("pointercancel", onDragEnd);
     const onContextLost = (event: Event) => {
       event.preventDefault();
       callbacks.current.onFail();
@@ -651,6 +711,11 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
       resizeObserver.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pointermove", onPointer);
+      host.removeEventListener("pointerdown", onDragStart);
+      host.removeEventListener("pointermove", onDragMove);
+      host.removeEventListener("pointerup", onDragEnd);
+      host.removeEventListener("pointercancel", onDragEnd);
+      host.classList.remove("is-dragging");
       canvas.removeEventListener("webglcontextlost", onContextLost);
       cubeMesh.dispose();
       disposables.forEach((item) => item.dispose());

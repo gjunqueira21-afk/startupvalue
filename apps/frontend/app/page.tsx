@@ -36,22 +36,23 @@ export default function HomePage() {
       <SiteHeader />
       <main id="main-content">
         <section className="hero section-grid">
-          <div className="container hero-grid">
-            <div className="hero-copy">
-              <p className="eyebrow"><span /> VALUATION INTELLIGENCE FOR STARTUPS</p>
-              <h1>Não existe um único futuro para uma startup. <em>Nós calculamos milhares deles.</em></h1>
-              <p className="hero-subtitle">Transforme projeções financeiras em uma distribuição probabilística de valuation através de Monte Carlo, DCF e Venture Capital Method.</p>
-              <div className="button-row">
-                <Link className="button button-primary" href="/signup">Calcular minha startup <ArrowUpRight /></Link>
-                <Link className="button button-secondary" href="#como-funciona">Ver como funciona <ArrowRight /></Link>
-              </div>
-              <div className="trust-row" aria-label="Princípios do produto">
-                <span><Check /> Premissas transparentes</span>
-                <span><Check /> Resultados reproduzíveis</span>
-                <span><Check /> Dados privados</span>
-              </div>
-            </div>
+          <div className="hero-stage">
             <HeroVisual summary={futuresSummary} fallback={<FuturesFallback summary={futuresSummary} />} />
+            <div className="hero-scroll-cue" aria-hidden="true"><span>SCROLL</span><i /></div>
+          </div>
+          <div className="container hero-copy">
+            <p className="eyebrow"><span /> VALUATION INTELLIGENCE FOR STARTUPS</p>
+            <h1>Não existe um único futuro para uma startup. <em>Nós calculamos milhares deles.</em></h1>
+            <p className="hero-subtitle">Transforme projeções financeiras em uma distribuição probabilística de valuation através de Monte Carlo, DCF e Venture Capital Method.</p>
+            <div className="button-row">
+              <Link className="button button-primary" href="/signup">Calcular minha startup <ArrowUpRight /></Link>
+              <Link className="button button-secondary" href="#como-funciona">Ver como funciona <ArrowRight /></Link>
+            </div>
+            <div className="trust-row" aria-label="Princípios do produto">
+              <span><Check /> Premissas transparentes</span>
+              <span><Check /> Resultados reproduzíveis</span>
+              <span><Check /> Dados privados</span>
+            </div>
           </div>
           <div className="container proof-strip" aria-label="Capacidades principais">
             <div><span>SIMULAÇÃO</span><strong>1k — 25k</strong><small>cenários por execução</small></div>

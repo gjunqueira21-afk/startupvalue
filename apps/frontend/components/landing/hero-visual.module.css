@@ -3,6 +3,7 @@
   overflow-x: clip;
   margin: 0;
   min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   color: var(--secondary);
@@ -46,7 +47,8 @@
 /* ---------------------------------------------------------------- stage */
 .stage {
   position: relative;
-  height: clamp(420px, 41vw, 560px);
+  flex: 1;
+  min-height: 300px;
   isolation: isolate;
 }
 
@@ -69,13 +71,14 @@
   inset: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
   transition: opacity 0.7s ease;
 }
 
 .frame {
   position: relative;
-  width: calc(100% - 84px);
-  /* aspect-ratio comes from FALLBACK_VIEW (inline style) */
+  /* aspect-ratio comes from FALLBACK_VIEW (inline style); 190svh keeps it inside a full-viewport stage */
+  width: min(calc(100% - 84px), 190svh);
 }
 
 .frame :global(.futures-fallback-svg) {
@@ -96,6 +99,11 @@
 .canvasHost :global(.futures-canvas-host) {
   position: absolute;
   inset: 0;
+  cursor: grab;
+}
+
+.canvasHost :global(.futures-canvas-host.is-dragging) {
+  cursor: grabbing;
 }
 
 .canvasHost :global(.futures-canvas) {
@@ -203,6 +211,11 @@
   opacity: 1;
 }
 
+/* the failure label only lands after the plunge (act 2 of the intro) */
+.labelsIn .liveLabels .labelFailure {
+  transition-delay: 1.5s;
+}
+
 /* ---------------------------------------------------------------- caption */
 .caption {
   display: flex;
@@ -283,20 +296,10 @@
 }
 
 /* ---------------------------------------------------------------- responsive */
-@media (max-width: 1000px) {
-  .stage {
-    height: clamp(360px, 62vw, 520px);
-  }
-}
-
 @media (max-width: 760px) {
   .hudMeta {
     font-size: 9px;
     letter-spacing: 0.08em;
-  }
-
-  .stage {
-    height: 340px;
   }
 
   .frame {
