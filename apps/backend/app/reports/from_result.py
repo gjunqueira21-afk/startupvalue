@@ -23,6 +23,13 @@ TERMINAL_METRIC_LABELS = {"revenue": "Receita", "ebitda": "EBITDA"}
 
 DEFAULT_VC_NOTE = "O Venture Capital Method não foi calculado nem persistido nesta simulação."
 
+# Every status != "available"/"infeasible" with a reason_code we don't recognize
+# (or no reason_code at all) falls back to this. It never embeds the raw
+# (English) ``reason`` text, so the report stays fully pt-BR.
+GENERIC_VC_UNAVAILABLE_NOTE = (
+    "O Venture Capital Method não pôde ser calculado com o perfil salvo."
+)
+
 VC_REASON_NOTES = {
     "revenue_projection_missing": (
         "Informe a projeção de receita de 5 anos no perfil da empresa para habilitar "
@@ -37,6 +44,13 @@ VC_REASON_NOTES = {
     ),
     "round_assumptions_invalid": (
         "Informe o aporte (investimento) e a participação-alvo no perfil da empresa."
+    ),
+    "exit_year_unsupported": "A projeção salva só permite saída no ano 5.",
+    "vc_calculation_invalid": (
+        "Os valores informados excedem os limites numéricos do cálculo."
+    ),
+    "exit_revenue_non_positive": (
+        "A receita do ano 5 precisa ser positiva para aplicar o múltiplo de saída."
     ),
 }
 
@@ -191,6 +205,26 @@ def _is_number(value: Any) -> TypeGuard[float]:
     return isinstance(value, int | float) and not isinstance(value, bool)
 
 
+def _horizon_label(inputs: dict[str, Any]) -> str:
+    """Report the persisted projection length; never assume the structured 60-month horizon.
+
+    The ``monthly_fcff`` path accepts 1-120 months (see ``CanonicalValuationInputs``),
+    so its real length must be read from the revision rather than fabricated. Only the
+    structured path (``monthly_revenue``/``monthly_opex``/``monthly_capex``) is fixed
+    at exactly 60 months by schema.
+    """
+    monthly_fcff = inputs.get("monthly_fcff")
+    if isinstance(monthly_fcff, list):
+        months = len(monthly_fcff)
+        # A bare 12-month projection reads fine as "12 meses"; the "(N anos)"
+        # aside only earns its place once there is more than one full year
+        # to summarize.
+        if months > 12 and months % 12 == 0:
+            return f"{months} meses ({months // 12} anos)"
+        return f"{months} meses"
+    return "60 meses (5 anos)"
+
+
 def _dcf_analysis(inputs: dict[str, Any], summary: dict[str, Any], currency: str) -> dict[str, Any]:
     """Summarize the deterministic DCF inputs that the Monte Carlo distribution propagates.
 
@@ -218,7 +252,7 @@ def _dcf_analysis(inputs: dict[str, Any], summary: dict[str, Any], currency: str
             {"name": "Crescimento terminal", "value": format_percent(float(terminal_growth))}
         )
 
-    metrics.append({"name": "Horizonte", "value": "60 meses (5 anos)"})
+    metrics.append({"name": "Horizonte", "value": _horizon_label(inputs)})
 
     excess_cash = inputs.get("excess_cash")
     if _is_number(excess_cash):
@@ -261,20 +295,17 @@ def _vc_policy_note(vc_method: dict[str, Any], currency: str) -> str:
 
 def _vc_analysis(vc_method: Any, currency: str) -> dict[str, Any]:
     if not isinstance(vc_method, dict):
-        return {"status": "not_available", "note": DEFAULT_VC_NOTE}
+        return {"status": "not_available", "note": DEFAULT_VC_NOTE[:1000]}
 
     status = vc_method.get("status")
     if status not in ("available", "infeasible"):
         reason_code = vc_method.get("reason_code")
-        reason = vc_method.get("reason")
         note = VC_REASON_NOTES.get(reason_code) if isinstance(reason_code, str) else None
         if note is None:
-            note = (
-                f"O Venture Capital Method não pôde ser calculado ({reason})."
-                if isinstance(reason, str) and reason
-                else DEFAULT_VC_NOTE
-            )
-        return {"status": "not_available", "note": note}
+            # Unknown/absent reason_code: stay honest without leaking the raw
+            # (English) `reason` text into an otherwise pt-BR report.
+            note = GENERIC_VC_UNAVAILABLE_NOTE
+        return {"status": "not_available", "note": note[:1000]}
 
     metrics: list[dict[str, str]] = []
 

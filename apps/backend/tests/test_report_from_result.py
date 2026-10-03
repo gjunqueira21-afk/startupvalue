@@ -182,6 +182,50 @@ def test_dcf_card_renders_exit_multiple_terminal_and_omits_missing_fields() -> N
     assert values["Equity mediano (P50)"] == format_money(5_000_000.0, "BRL")
 
 
+def test_dcf_card_horizon_reflects_persisted_monthly_fcff_length() -> None:
+    """A 12-month FCFF revision must never report the structured 60-month horizon."""
+    db = _session()
+    canonical_inputs = {
+        "monthly_fcff": [100_000.0] * 12,
+        "annual_wacc": 0.2,
+        "terminal_growth": 0.03,
+    }
+    simulation, result, revision, scenario, startup = _fixture(
+        db,
+        suffix="dcf-horizon-12",
+        canonical_inputs=canonical_inputs,
+        summary=_summary(p50=7_000_000.0),
+    )
+
+    data = report_from_result(
+        simulation=simulation, result=result, revision=revision, scenario=scenario,
+        startup=startup,
+    )
+
+    values = _metric_values(data.dcf.metrics)
+    assert values["Horizonte"] == "12 meses"
+    assert "60" not in values["Horizonte"]
+
+
+def test_dcf_card_horizon_defaults_to_60_months_for_structured_projections() -> None:
+    db = _session()
+    canonical_inputs = {"annual_wacc": 0.2, "terminal_growth": 0.03}
+    simulation, result, revision, scenario, startup = _fixture(
+        db,
+        suffix="dcf-horizon-structured",
+        canonical_inputs=canonical_inputs,
+        summary=_summary(p50=7_000_000.0),
+    )
+
+    data = report_from_result(
+        simulation=simulation, result=result, revision=revision, scenario=scenario,
+        startup=startup,
+    )
+
+    values = _metric_values(data.dcf.metrics)
+    assert values["Horizonte"] == "60 meses (5 anos)"
+
+
 # --- VC card --------------------------------------------------------------
 
 
@@ -309,12 +353,89 @@ def test_vc_card_unavailable_maps_reason_code_to_actionable_note() -> None:
     )
 
 
-def test_vc_card_unavailable_with_unmapped_reason_code_is_still_honest() -> None:
+def test_vc_card_unavailable_maps_exit_year_unsupported() -> None:
     db = _session()
     vc_method = {
         "status": "unavailable",
         "reason_code": "exit_year_unsupported",
         "reason": "The saved revenue projection supports only a year-five exit.",
+    }
+    simulation, result, revision, scenario, startup = _fixture(
+        db,
+        suffix="vc-unavailable-exit-year",
+        canonical_inputs={"annual_wacc": 0.2},
+        summary=_summary(vc_method=vc_method),
+    )
+
+    data = report_from_result(
+        simulation=simulation, result=result, revision=revision, scenario=scenario,
+        startup=startup,
+    )
+
+    assert data.venture_capital.status == "not_available"
+    assert data.venture_capital.note == "A projeção salva só permite saída no ano 5."
+
+
+def test_vc_card_unavailable_maps_vc_calculation_invalid() -> None:
+    db = _session()
+    vc_method = {
+        "status": "unavailable",
+        "reason_code": "vc_calculation_invalid",
+        "reason": "Exit revenue or value exceeds numeric limits.",
+    }
+    simulation, result, revision, scenario, startup = _fixture(
+        db,
+        suffix="vc-unavailable-calc-invalid",
+        canonical_inputs={"annual_wacc": 0.2},
+        summary=_summary(vc_method=vc_method),
+    )
+
+    data = report_from_result(
+        simulation=simulation, result=result, revision=revision, scenario=scenario,
+        startup=startup,
+    )
+
+    assert data.venture_capital.status == "not_available"
+    assert data.venture_capital.note == (
+        "Os valores informados excedem os limites numéricos do cálculo."
+    )
+
+
+def test_vc_card_unavailable_maps_exit_revenue_non_positive() -> None:
+    db = _session()
+    vc_method = {
+        "status": "unavailable",
+        "reason_code": "exit_revenue_non_positive",
+        "reason": "Year-five exit revenue must be positive for a revenue multiple.",
+    }
+    simulation, result, revision, scenario, startup = _fixture(
+        db,
+        suffix="vc-unavailable-revenue-non-positive",
+        canonical_inputs={"annual_wacc": 0.2},
+        summary=_summary(vc_method=vc_method),
+    )
+
+    data = report_from_result(
+        simulation=simulation, result=result, revision=revision, scenario=scenario,
+        startup=startup,
+    )
+
+    assert data.venture_capital.status == "not_available"
+    assert data.venture_capital.note == (
+        "A receita do ano 5 precisa ser positiva para aplicar o múltiplo de saída."
+    )
+
+
+def test_vc_card_unmapped_reason_code_stays_honest_without_leaking_english() -> None:
+    """An unmapped reason_code (e.g. ``startup_profile_unavailable``) must stay pt-BR
+
+    only -- never the raw English ``reason`` string.
+    """
+    db = _session()
+    vc_method = {
+        "status": "unavailable",
+        "reason_code": "startup_profile_unavailable",
+        "reason": "No startup profile was found for this scenario revision.",
     }
     simulation, result, revision, scenario, startup = _fixture(
         db,
@@ -329,8 +450,10 @@ def test_vc_card_unavailable_with_unmapped_reason_code_is_still_honest() -> None
     )
 
     assert data.venture_capital.status == "not_available"
-    assert data.venture_capital.note is not None
-    assert "year-five exit" in data.venture_capital.note
+    assert data.venture_capital.note == (
+        "O Venture Capital Method não pôde ser calculado com o perfil salvo."
+    )
+    assert "No startup profile" not in (data.venture_capital.note or "")
 
 
 def test_vc_card_without_persisted_vc_method_uses_backward_compatible_note() -> None:
