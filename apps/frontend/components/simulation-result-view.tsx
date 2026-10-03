@@ -7,9 +7,11 @@ import {
   getDecision,
   getInsight,
   getSimulation,
+  getTarget,
   type DecisionResponse,
   type InsightResponse,
   type SimulationResponse,
+  type TargetPlan,
 } from "@/lib/api/simulations";
 import { basisLabel } from "@/lib/format";
 import { suggestedTarget } from "@/lib/results";
@@ -42,6 +44,7 @@ function ResultContent({ simulation }: { simulation: SimulationResponse }) {
   const [decision, setDecision] = useState<DecisionResponse | null>(null);
   const [insight, setInsight] = useState<InsightResponse | null>(null);
   const [target, setTarget] = useState<number | null>(defaultTarget);
+  const [plan, setPlan] = useState<TargetPlan | null>(null);
   const [loadError, setLoadError] = useState("");
   const [targetError, setTargetError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -52,10 +55,17 @@ function ResultContent({ simulation }: { simulation: SimulationResponse }) {
     Promise.all([
       getDecision(simulation.simulation_id, controller.signal),
       getInsight(simulation.simulation_id, defaultTarget, controller.signal),
+      defaultTarget === null
+        ? Promise.resolve(null)
+        // The "Plano para a meta" section is supplementary: a failure here (not
+        // entitled, transient error) degrades to hidden, it never blocks the rest
+        // of the page, so it gets its own catch instead of joining the one below.
+        : getTarget(simulation.simulation_id, defaultTarget, controller.signal).catch(() => null),
     ])
-      .then(([decisionResult, insightResult]) => {
+      .then(([decisionResult, insightResult, targetResult]) => {
         setDecision(decisionResult);
         setInsight(insightResult);
+        setPlan(targetResult?.plan ?? null);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -68,8 +78,15 @@ function ResultContent({ simulation }: { simulation: SimulationResponse }) {
     setBusy(true);
     setTargetError("");
     try {
-      setInsight(await getInsight(simulation.simulation_id, value));
+      const [insightResult, targetResult] = await Promise.all([
+        getInsight(simulation.simulation_id, value),
+        // Same degrade-to-hidden rule as the initial load: a target-plan failure
+        // must not surface as a target-analysis error.
+        getTarget(simulation.simulation_id, value).catch(() => null),
+      ]);
+      setInsight(insightResult);
       setTarget(value);
+      setPlan(targetResult?.plan ?? null);
     } catch {
       setTargetError("Não foi possível analisar esta meta.");
     } finally {
@@ -130,6 +147,7 @@ function ResultContent({ simulation }: { simulation: SimulationResponse }) {
               {insight && (
                 <TargetCard
                   target={insight.target}
+                  plan={plan}
                   initialValue={defaultTarget}
                   busy={busy}
                   error={targetError}

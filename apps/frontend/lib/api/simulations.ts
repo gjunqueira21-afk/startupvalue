@@ -169,6 +169,41 @@ export interface TargetPlan {
   trajectory: YearTarget[];
 }
 
+export interface ConditionalStatistics {
+  count: number;
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  reason: string | null;
+}
+
+export interface TargetComparison {
+  name: string;
+  label: string;
+  unit: VariableUnit | null;
+  role: "driver" | "outcome";
+  hit: ConditionalStatistics;
+  miss: ConditionalStatistics;
+  median_difference_hit_minus_miss: number | null;
+  status: string;
+}
+
+/** Mirror of `GET /api/v1/simulations/{id}/target` (`TargetResponse`, Task 4 shape). */
+export interface TargetResponse {
+  simulation_id: string;
+  result_hash: string;
+  basis: string;
+  target: number;
+  scenario_count: number;
+  hit_count: number;
+  miss_count: number;
+  probability: number;
+  wilson95_low: number;
+  wilson95_high: number;
+  comparisons: TargetComparison[];
+  plan: TargetPlan | null;
+}
+
 export interface TargetInsight {
   target: number;
   probability: number;
@@ -457,6 +492,13 @@ export function getDecision(simulationId: string, signal?: AbortSignal) {
 export function getInsight(simulationId: string, target: number | null, signal?: AbortSignal) {
   const query = target === null ? "" : `?target=${encodeURIComponent(target)}`;
   return apiRequest<InsightResponse>(`/api/v1/simulations/${simulationId}/insight${query}`, {
+    method: "GET", signal,
+  });
+}
+
+/** Fetches the same target's conditional comparisons plus the "Plano para a meta" plan (`plan: null` when not entitled). */
+export function getTarget(simulationId: string, value: number, signal?: AbortSignal) {
+  return apiRequest<TargetResponse>(`/api/v1/simulations/${simulationId}/target?value=${encodeURIComponent(value)}`, {
     method: "GET", signal,
   });
 }
