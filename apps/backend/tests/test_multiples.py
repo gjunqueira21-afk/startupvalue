@@ -12,6 +12,7 @@ def test_small_sample_below_minimum_yields_none():
     valuations = np.array([120.0, 300.0, 80.0, 240.0])
     revenue = np.array([10.0, 20.0, 16.0, 12.0])
     # multiples: [12, 15, 5, 20] -> sorted [5, 12, 15, 20]
+    assert valuations.size < MIN_ELIGIBLE_SCENARIOS
     result = compute_implied_multiples(valuations, revenue, None)
     summary = result.value_to_revenue
     assert summary is None  # only 4 eligible < MIN_ELIGIBLE_SCENARIOS

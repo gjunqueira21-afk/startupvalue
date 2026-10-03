@@ -1,7 +1,12 @@
 """Decision-intelligence analysis over immutable simulation samples."""
 
 from .catalog import describe, split_by_role
-from .multiples import ImpliedMultiples, MultipleSummary, compute_implied_multiples, implied_multiples_payload
+from .multiples import (
+    ImpliedMultiples,
+    MultipleSummary,
+    compute_implied_multiples,
+    implied_multiples_payload,
+)
 from .sensitivity import DriverRanking, RankedDriver, rank_drivers
 from .targets import TargetAnalysis, analyze_target, wilson_interval
 from .uncertainty import UncertaintyAssessment, assess_uncertainty
