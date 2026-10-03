@@ -19,7 +19,7 @@ def upgrade() -> None:
     op.add_column(
         "users",
         sa.Column(
-            "is_platform_admin", sa.Boolean(), nullable=False, server_default="false"
+            "is_platform_admin", sa.Boolean(), nullable=False, server_default=sa.text("false")
         ),
     )
 

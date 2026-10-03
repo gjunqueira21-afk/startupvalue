@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -61,7 +62,7 @@ class User(TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(Text)
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_platform_admin: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default="false"
+        Boolean, default=False, server_default=text("false")
     )
 
 
