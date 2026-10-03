@@ -54,7 +54,7 @@ export const PLANS: Plan[] = [
  * and `/pricing` so both stay in sync with a single source of truth for
  * copy and prices.
  */
-export function PricingCards({ source }: { source: string }) {
+export function PricingCards({ source }: { source: "landing" | "pricing" }) {
   return (
     <div className="container pricing-grid">
       {PLANS.map((plan) => (

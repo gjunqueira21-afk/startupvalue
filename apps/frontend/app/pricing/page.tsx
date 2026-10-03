@@ -11,7 +11,9 @@ export const metadata: Metadata = { title: "Planos" };
  * entitlement matrix in `app/core/entitlements.py` (métodos, múltiplos
  * implícitos, plano para a meta are identical across tiers except Grátis;
  * Escritório inherits every Consultor feature, only unlimited empresas
- * differs) — "suporte" has no entitlement backing and is kept conservative.
+ * differs). There is no "suporte" row: a support-tier commitment has no
+ * backing in entitlements.py, the product spec, or any operational policy
+ * today — add one back only once a real support policy exists.
  */
 const comparisonRows: [string, string, string, string, string][] = [
   ["Empresas", "1 empresa", "5 empresas", "Até 10 empresas-clientes", "Empresas-clientes ilimitadas"],
@@ -21,7 +23,6 @@ const comparisonRows: [string, string, string, string, string][] = [
   ["Plano para a meta", "—", "Sim", "Sim", "Sim"],
   ["Relatório PDF", "Resumo com marca d'água", "Completo", "Completo", "Completo"],
   ["White label", "—", "—", "Sim", "Sim"],
-  ["Suporte", "E-mail", "E-mail", "E-mail", "E-mail prioritário"],
 ];
 
 export default function PricingPage() {
