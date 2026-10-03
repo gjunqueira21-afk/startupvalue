@@ -327,7 +327,10 @@ def test_consultor_workspace_with_branding_gets_branded_pdf_and_audit_event(
     response = owner.get(f"/api/v1/simulations/{simulation_id}/report.pdf")
 
     assert response.status_code == 200, response.text
-    assert "quantovale-" in response.headers["content-disposition"]
+    disposition = response.headers["content-disposition"]
+    # A white-label filename must not name the vendor.
+    assert f'filename="relatorio-valuation-{simulation_id}.pdf"' in disposition
+    assert "quantovale" not in disposition.lower()
     text = "\n".join(
         page.extract_text() or "" for page in PdfReader(BytesIO(response.content)).pages
     )

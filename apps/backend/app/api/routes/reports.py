@@ -144,11 +144,17 @@ def download_simulation_report(
         metadata={"simulation_id": simulation.id, "result_hash": result.result_hash},
     )
     db.commit()
+    # A white-labelled report must not name the vendor in its filename.
+    filename = (
+        f"relatorio-valuation-{simulation.id}.pdf"
+        if branding_data is not None
+        else f"quantovale-{simulation.id}.pdf"
+    )
     return Response(
         content=pdf,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="quantovale-{simulation.id}.pdf"',
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
         },

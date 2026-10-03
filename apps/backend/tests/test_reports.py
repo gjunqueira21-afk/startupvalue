@@ -354,3 +354,24 @@ def test_default_build_report_pdf_call_is_unaffected_by_new_parameters() -> None
     pdf_bytes = build_report_pdf(data)
 
     assert pdf_bytes.startswith(b"%PDF-")
+
+def test_branded_report_clips_overlong_firm_name_and_footer_text() -> None:
+    data = ReportData.model_validate(report_payload())
+    firm_name = "Consultoria " + "X" * 108  # 120 chars, the schema maximum
+    footer_text = "Rodape " + "Y" * 293  # 300 chars
+    assert len(firm_name) == 120 and len(footer_text) == 300
+    branding = ReportBrandingData(firm_name=firm_name, footer_text=footer_text)
+
+    pdf_bytes = build_report_pdf(data, branding=branding)
+
+    assert pdf_bytes.startswith(b"%PDF")
+    reader = PdfReader(BytesIO(pdf_bytes))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    # Cover and page chrome draw clipped strings (with an ellipsis), never the
+    # full user-supplied text that would run over the badge / context block.
+    assert firm_name not in text
+    assert footer_text not in text
+    assert "Consultoria XXX" in text
+    assert "Rodape YYY" in text
+    assert "X..." in text
+    assert "Y..." in text

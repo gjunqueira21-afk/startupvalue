@@ -138,10 +138,15 @@ def _source_label(branding: ReportBrandingData | None) -> str:
     return SOURCE if branding is None else "SimulationResult"
 
 
-def _clip(canvas: Canvas, value: str, font: str, size: float, width: float) -> str:
-    if canvas.stringWidth(value, font, size) <= width:
+def _clip(
+    canvas: Canvas, value: str, font: str, size: float, width: float, char_space: float = 0
+) -> str:
+    def measure(text: str) -> float:
+        return canvas.stringWidth(text, font, size) + char_space * len(text)
+
+    if measure(value) <= width:
         return value
-    while value and canvas.stringWidth(f"{value}...", font, size) > width:
+    while value and measure(f"{value}...") > width:
         value = value[:-1]
     return f"{value.rstrip()}..."
 
@@ -247,9 +252,20 @@ def _cover(
         else:
             _brand_mark(canvas, left, top, mark_size, accent)
             name_label = "STARTUPVALUE"
+        badge = "CONFIDENCIAL"
+        badge_w = canvas.stringWidth(badge, "Helvetica-Bold", 7.5) + 11 * 1 + 5 * mm
+        # Brand text runs from the logo slot to just short of the badge;
+        # user-supplied firm names / footer texts are clipped to that budget.
+        label_x = left + 12.5 * mm
+        label_budget = (right - badge_w - 4 * mm) - label_x
         canvas.setFillColor(INK)
         canvas.setFont("Helvetica-Bold", 12)
-        canvas.drawString(left + 12.5 * mm, top + 4.4 * mm, name_label, charSpace=1.6)
+        canvas.drawString(
+            label_x,
+            top + 4.4 * mm,
+            _clip(canvas, name_label, "Helvetica-Bold", 12, label_budget, char_space=1.6),
+            charSpace=1.6,
+        )
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(MUTED)
         tagline = (
@@ -259,10 +275,10 @@ def _cover(
         )
         # ``tagline`` always falls back to a non-empty default above, so it is
         # unconditionally drawn.
-        canvas.drawString(left + 12.5 * mm, top + 0.4 * mm, tagline)
-        badge = "CONFIDENCIAL"
+        canvas.drawString(
+            label_x, top + 0.4 * mm, _clip(canvas, tagline, "Helvetica", 7.5, label_budget)
+        )
         canvas.setFont("Helvetica-Bold", 7.5)
-        badge_w = canvas.stringWidth(badge, "Helvetica-Bold", 7.5) + 11 * 1 + 5 * mm
         canvas.setStrokeColor(INK)
         canvas.setLineWidth(0.7)
         canvas.rect(right - badge_w, top + 1.8 * mm, badge_w, 6 * mm, stroke=1, fill=0)
@@ -427,11 +443,28 @@ def _page_chrome(
         canvas.saveState()
         left, right = PAGE_MARGIN_X, PAGE_WIDTH - PAGE_MARGIN_X
         header_y = PAGE_HEIGHT - 13 * mm
-        brand_label = branding.firm_name if branding is not None else "STARTUPVALUE"
+        context = _clip(
+            canvas,
+            f"{data.company.scenario_name} · Data-base {_date(data)}",
+            "Helvetica",
+            6.8,
+            90 * mm,
+        )
+        # Brand label + tagline share the space left of the right-aligned
+        # context block; user-supplied branding is clipped to fit it.
+        header_budget = (right - canvas.stringWidth(context, "Helvetica", 6.8) - 4 * mm) - left
+        brand_label = _clip(
+            canvas,
+            branding.firm_name if branding is not None else "STARTUPVALUE",
+            "Helvetica-Bold",
+            6.8,
+            min(60 * mm, header_budget),
+            char_space=0.9,
+        )
         canvas.setFont("Helvetica-Bold", 6.8)
         canvas.setFillColor(GREEN if branding is None else INK)
         canvas.drawString(left, header_y, brand_label, charSpace=0.9)
-        brand_w = canvas.stringWidth(brand_label, "Helvetica-Bold", 6.8) + 11 * 0.9
+        brand_w = canvas.stringWidth(brand_label, "Helvetica-Bold", 6.8) + 0.9 * len(brand_label)
         canvas.setFont("Helvetica", 6.8)
         canvas.setFillColor(MUTED)
         chrome_tagline = (
@@ -441,11 +474,12 @@ def _page_chrome(
         )
         # ``chrome_tagline`` always falls back to a non-empty default above,
         # so it is unconditionally drawn.
-        canvas.drawString(left + brand_w + 2 * mm, header_y, chrome_tagline)
-        context = f"{data.company.scenario_name} · Data-base {_date(data)}"
-        canvas.drawRightString(
-            right, header_y, _clip(canvas, context, "Helvetica", 6.8, 90 * mm)
+        canvas.drawString(
+            left + brand_w + 2 * mm,
+            header_y,
+            _clip(canvas, chrome_tagline, "Helvetica", 6.8, header_budget - brand_w - 2 * mm),
         )
+        canvas.drawRightString(right, header_y, context)
         canvas.setStrokeColor(LINE)
         canvas.setLineWidth(0.5)
         canvas.line(left, header_y - 2.6 * mm, right, header_y - 2.6 * mm)
