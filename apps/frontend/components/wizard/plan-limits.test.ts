@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  ENTITLEMENTS_UNKNOWN_MESSAGE,
+  PLAN_LIMIT_MESSAGES,
   checkSubmission,
   clampSimulationCount,
   highestAllowedPreset,
@@ -49,7 +51,7 @@ describe("clampSimulationCount", () => {
 describe("checkSubmission", () => {
   it("blocks a new company when the free workspace already has one", () => {
     expect(checkSubmission({ entitlements: FREE, companyCount: 1, createsCompany: true, simulationCount: 1_000 }))
-      .toEqual({ ok: false, code: "plan_limit_startups" });
+      .toEqual({ ok: false, code: "plan_limit_startups", message: PLAN_LIMIT_MESSAGES.plan_limit_startups });
   });
 
   it("allows a run on the existing company at the cap", () => {
@@ -64,9 +66,9 @@ describe("checkSubmission", () => {
 
   it("blocks a count above the per-run cap before any company is created", () => {
     expect(checkSubmission({ entitlements: FREE, companyCount: 0, createsCompany: true, simulationCount: 10_000 }))
-      .toEqual({ ok: false, code: "plan_limit_scenarios" });
+      .toEqual({ ok: false, code: "plan_limit_scenarios", message: PLAN_LIMIT_MESSAGES.plan_limit_scenarios });
     expect(checkSubmission({ entitlements: EMPRESARIO, companyCount: 0, createsCompany: true, simulationCount: 25_000 }))
-      .toEqual({ ok: false, code: "plan_limit_scenarios" });
+      .toEqual({ ok: false, code: "plan_limit_scenarios", message: PLAN_LIMIT_MESSAGES.plan_limit_scenarios });
   });
 
   it("never caps companies on unlimited plans", () => {
@@ -74,9 +76,12 @@ describe("checkSubmission", () => {
       .toEqual({ ok: true });
   });
 
-  it("defers to the backend when entitlements or the company count are unknown", () => {
+  it("fails closed at submit when entitlements could not be fetched", () => {
     expect(checkSubmission({ entitlements: null, companyCount: null, createsCompany: true, simulationCount: 25_000 }))
-      .toEqual({ ok: true });
+      .toEqual({ ok: false, message: ENTITLEMENTS_UNKNOWN_MESSAGE });
+  });
+
+  it("still defers to the backend when only the company count is unknown", () => {
     expect(checkSubmission({ entitlements: FREE, companyCount: null, createsCompany: true, simulationCount: 1_000 }))
       .toEqual({ ok: true });
   });

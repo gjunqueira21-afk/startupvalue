@@ -210,7 +210,11 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
     });
   }, [hydrated, entitlements]);
 
+  // Entitlements still loading must not flash this notice — checkSubmission
+  // fails closed on a null plan (see plan-limits.ts), so that case is
+  // guarded out here; once loaded, a real plan_limit_startups still shows.
   const companyLimitReached = startupId === null
+    && entitlements !== null
     && !checkSubmission({ entitlements, companyCount: companies?.length ?? null, createsCompany: true, simulationCount: 0 }).ok;
 
   const selectCompany = (id: string) => {
@@ -327,7 +331,7 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
       simulationCount: draft.monteCarlo.simulationCount,
     });
     if (!check.ok) {
-      setSubmission({ kind: "error", code: check.code, message: PLAN_LIMIT_MESSAGES[check.code] });
+      setSubmission({ kind: "error", code: check.code, message: check.message });
       return;
     }
     setSubmission({ kind: "loading" });

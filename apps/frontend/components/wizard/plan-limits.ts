@@ -54,13 +54,33 @@ export function clampSimulationCount(current: SimulationCountPreset, maxPerRun: 
 
 export type PlanLimitCode = "plan_limit_startups" | "plan_limit_scenarios";
 
-export type SubmissionCheck = { ok: true } | { ok: false; code: PlanLimitCode };
+export type SubmissionCheck = { ok: true } | { ok: false; code?: PlanLimitCode; message: string };
+
+export const PLAN_LIMIT_MESSAGES: Record<PlanLimitCode, string> = {
+  plan_limit_startups:
+    "Seu plano atingiu o limite de empresas. Selecione uma empresa existente para rodar uma nova análise ou faça upgrade do plano.",
+  plan_limit_scenarios:
+    "A quantidade de cenários escolhida excede o limite do seu plano. Escolha uma quantidade menor ou faça upgrade do plano.",
+};
+
+/**
+ * Submit-time message when entitlements could not be fetched. Unlike the
+ * preset OPTIONS (`simulationCountOptions`/`clampSimulationCount`), which
+ * stay permissive while entitlements are loading, the actual submit check
+ * below fails closed: a silent fetch failure must never let an over-cap run
+ * slip past the frontend gate and burn a company slot.
+ */
+export const ENTITLEMENTS_UNKNOWN_MESSAGE =
+  "Não foi possível verificar seu plano. Recarregue a página e tente novamente.";
 
 /**
  * Decides, before ANY resource is created, whether a run can succeed under
  * the plan. A doomed run must never POST a startup (that would burn a slot).
- * `companyCount` is the number of active companies from `GET /startups`;
- * null entitlements / count mean "unknown" and defer to the backend.
+ * `companyCount` is the number of active companies from `GET /startups` and
+ * null means "unknown" there still defers to the backend's own check — but
+ * `entitlements === null` (the plan itself could not be fetched) fails
+ * closed, since the backend enforcement point is exactly what we could not
+ * reach.
  */
 export function checkSubmission(params: {
   entitlements: Pick<Entitlements, "max_startups" | "max_scenarios_per_run"> | null;
@@ -69,25 +89,20 @@ export function checkSubmission(params: {
   simulationCount: number;
 }): SubmissionCheck {
   const { entitlements, companyCount, createsCompany, simulationCount } = params;
-  if (entitlements === null) return { ok: true };
-  if (simulationCount > entitlements.max_scenarios_per_run) return { ok: false, code: "plan_limit_scenarios" };
+  if (entitlements === null) return { ok: false, message: ENTITLEMENTS_UNKNOWN_MESSAGE };
+  if (simulationCount > entitlements.max_scenarios_per_run) {
+    return { ok: false, code: "plan_limit_scenarios", message: PLAN_LIMIT_MESSAGES.plan_limit_scenarios };
+  }
   if (
     createsCompany
     && entitlements.max_startups !== null
     && companyCount !== null
     && companyCount >= entitlements.max_startups
   ) {
-    return { ok: false, code: "plan_limit_startups" };
+    return { ok: false, code: "plan_limit_startups", message: PLAN_LIMIT_MESSAGES.plan_limit_startups };
   }
   return { ok: true };
 }
-
-export const PLAN_LIMIT_MESSAGES: Record<PlanLimitCode, string> = {
-  plan_limit_startups:
-    "Seu plano atingiu o limite de empresas. Selecione uma empresa existente para rodar uma nova análise ou faça upgrade do plano.",
-  plan_limit_scenarios:
-    "A quantidade de cenários escolhida excede o limite do seu plano. Escolha uma quantidade menor ou faça upgrade do plano.",
-};
 
 /** Extracts a plan-limit code from an API error body (`{"detail": "plan_limit_…"}`). */
 export function planLimitCode(details: unknown): PlanLimitCode | null {
