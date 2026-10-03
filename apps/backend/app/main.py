@@ -8,6 +8,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.reports import router as reports_router
 from app.api.routes.resources import router as resources_router
 from app.api.routes.simulations import router as simulations_router
+from app.api.routes.waitlist import router as waitlist_router
 from app.api.routes.workspace import router as workspace_router
 from app.auth.csrf import csrf_guard
 from app.core.config import get_settings
@@ -34,6 +35,7 @@ app.include_router(simulations_router)
 app.include_router(reports_router)
 app.include_router(workspace_router)
 app.include_router(branding_router)
+app.include_router(waitlist_router)
 
 
 @app.get("/api/v1/meta", tags=["meta"])

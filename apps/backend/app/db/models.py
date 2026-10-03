@@ -242,6 +242,18 @@ class ReportBranding(TimestampMixin, Base):
     logo_media_type: Mapped[str | None] = mapped_column(String(32))
 
 
+class WaitlistEntry(Base):
+    """Public waitlist signups; no workspace, no ``record_event`` audit trail."""
+
+    __tablename__ = "waitlist_entries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    plan_interest: Mapped[str] = mapped_column(String(20))
+    source: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 
