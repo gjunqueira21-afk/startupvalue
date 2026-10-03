@@ -150,7 +150,7 @@ def _run_simulation(
 # --- scenario count boundaries ----------------------------------------------
 
 
-def test_free_workspace_allows_scenario_count_at_limit_and_blocks_over(
+def test_free_workspace_allows_preset_at_limit_and_blocks_over_preset(
     api: tuple[TestClient, sessionmaker[Session]],
 ) -> None:
     client, _ = api
@@ -160,12 +160,30 @@ def test_free_workspace_allows_scenario_count_at_limit_and_blocks_over(
     at_limit = _run_simulation(client, revision_id, 1000)
     assert at_limit.status_code == 201, at_limit.text
 
-    over_limit = _run_simulation(client, revision_id, 1001)
+    over_limit = _run_simulation(client, revision_id, 5000)
     assert over_limit.status_code == 403, over_limit.text
     assert over_limit.json()["detail"] == "plan_limit_scenarios"
 
 
-def test_empresario_workspace_allows_scenario_count_at_limit_and_blocks_over(
+def test_free_workspace_blocks_the_largest_preset_too(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    """The entitlement check fires for ANY over-cap preset, not only the next
+
+    one up: a client sending the largest valid preset (25.000) is still
+    capped at the plan's limit, proving this is a business-rule 403, not an
+    accidental edge of the schema validation.
+    """
+    client, _ = api
+    _signup(client, "free-scenarios-forged@example.com")
+    revision_id = _create_revision(client)
+
+    forged = _run_simulation(client, revision_id, 25_000)
+    assert forged.status_code == 403, forged.text
+    assert forged.json()["detail"] == "plan_limit_scenarios"
+
+
+def test_empresario_workspace_allows_preset_at_limit_and_blocks_over_preset(
     api: tuple[TestClient, sessionmaker[Session]],
 ) -> None:
     client, factory = api
@@ -176,9 +194,37 @@ def test_empresario_workspace_allows_scenario_count_at_limit_and_blocks_over(
     at_limit = _run_simulation(client, revision_id, 10_000)
     assert at_limit.status_code == 201, at_limit.text
 
-    over_limit = _run_simulation(client, revision_id, 10_001)
+    over_limit = _run_simulation(client, revision_id, 25_000)
     assert over_limit.status_code == 403, over_limit.text
     assert over_limit.json()["detail"] == "plan_limit_scenarios"
+
+
+def test_consultor_workspace_allows_the_largest_preset(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    client, factory = api
+    session = _signup(client, "consultor-scenarios@example.com")
+    _set_plan(factory, str(session["workspace_id"]), PlanTier.consultor)
+    revision_id = _create_revision(client)
+
+    at_limit = _run_simulation(client, revision_id, 25_000)
+    assert at_limit.status_code == 201, at_limit.text
+
+
+def test_non_preset_scenario_count_is_rejected_by_the_literal_contract(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    """``simulation_count`` is a fixed product contract (PRODUCT_SPEC §8):
+
+    only 1.000/5.000/10.000/25.000 are valid; anything else 422s at the
+    schema layer, before any entitlement check runs.
+    """
+    client, _ = api
+    _signup(client, "non-preset-scenarios@example.com")
+    revision_id = _create_revision(client)
+
+    response = _run_simulation(client, revision_id, 1001)
+    assert response.status_code == 422, response.text
 
 
 # --- startup count boundaries -----------------------------------------------

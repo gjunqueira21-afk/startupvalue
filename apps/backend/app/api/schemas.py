@@ -286,7 +286,7 @@ class RevisionResponse(ApiModel):
 
 class SimulationRunRequest(ApiModel):
     seed: int = Field(ge=0, le=2**63 - 1)
-    simulation_count: int = Field(default=1000, ge=1, le=25_000)
+    simulation_count: Literal[1000, 5000, 10000, 25000] = 1000
     idempotency_key: str | None = Field(
         default=None, min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
     )
