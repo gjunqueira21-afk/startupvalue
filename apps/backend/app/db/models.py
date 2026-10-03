@@ -66,6 +66,7 @@ class Workspace(TimestampMixin, Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
     name: Mapped[str] = mapped_column(String(160))
+    plan: Mapped[str] = mapped_column(String(20), default="free", server_default="free")
 
 
 class WorkspaceMembership(TimestampMixin, Base):
