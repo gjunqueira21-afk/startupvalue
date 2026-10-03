@@ -429,6 +429,21 @@ class TargetComparisonResponse(ApiModel):
     status: str
 
 
+class YearTargetResponse(ApiModel):
+    year: int
+    revenue: float
+
+
+class TargetPlanResponse(ApiModel):
+    status: str
+    hit_count: int
+    required_revenue_cagr: float | None = None
+    hit_ebitda_margin: float | None = None
+    miss_revenue_cagr: float | None = None
+    miss_ebitda_margin: float | None = None
+    trajectory: list[YearTargetResponse] = []
+
+
 class TargetResponse(ApiModel):
     simulation_id: str
     result_hash: str
@@ -441,6 +456,7 @@ class TargetResponse(ApiModel):
     wilson95_low: float
     wilson95_high: float
     comparisons: list[TargetComparisonResponse]
+    plan: TargetPlanResponse | None = None
 
 
 class UncertaintyInsightResponse(ApiModel):

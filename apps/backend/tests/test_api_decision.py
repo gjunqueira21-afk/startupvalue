@@ -81,6 +81,86 @@ def _run(client: TestClient, email: str) -> dict[str, object]:
     )
 
 
+def _run_structured(client: TestClient, email: str) -> dict[str, object]:
+    _post(
+        client,
+        "/api/v1/auth/signup",
+        {"name": "Target Plan Founder", "email": email, "password": "strong-password-123"},
+    )
+    startup = _post(client, "/api/v1/startups", {"name": "Target Plan Co"})
+    scenario = _post(
+        client,
+        f"/api/v1/startups/{startup['id']}/scenarios",
+        {"name": "Base", "mode": "professional"},
+    )
+    revision = _post(
+        client,
+        f"/api/v1/scenarios/{scenario['id']}/revisions",
+        {
+            "inputs": {
+                "monthly_revenue": [100.0] * 60,
+                "monthly_opex": [20.0] * 60,
+                "monthly_capex": [10.0] * 60,
+                "gross_margin": 0.5,
+                "revenue_uncertainty": {"kind": "constant", "value": 1.0},
+                "cost_uncertainty": {"kind": "constant", "value": 1.0},
+                "margin_uncertainty_pp": 0.0,
+                "serial_correlation": 0.65,
+                "persistent_weight": 0.6,
+                "annual_wacc": 0.2,
+                "terminal_growth": 0.03,
+                "failure_probability_horizon": 0.0,
+            }
+        },
+    )
+    return _post(
+        client,
+        "/api/v1/simulations",
+        {"scenario_revision_id": revision["id"], "seed": 471829, "simulation_count": 1000},
+    )
+
+
+def test_target_response_includes_plan_for_structured_inputs(
+    clients: tuple[TestClient, TestClient, sessionmaker[Session]],
+) -> None:
+    owner, _, _ = clients
+    run = _run_structured(owner, "target-plan-owner@example.com")
+    simulation_id = str(run["simulation_id"])
+    summary = run["summary"]
+    assert isinstance(summary, dict)
+    p50 = summary["percentiles"]["p50"]
+
+    response = owner.get(
+        f"/api/v1/simulations/{simulation_id}/target", params={"value": p50}
+    )
+    assert response.status_code == 200, response.text
+    plan = response.json()["plan"]
+    assert plan["status"] in {"available", "insufficient_hits"}
+    if plan["status"] == "available":
+        assert len(plan["trajectory"]) == 5
+        assert plan["trajectory"][0]["year"] == 1
+
+
+def test_target_plan_base_revenue_comes_from_revision_year_one(
+    clients: tuple[TestClient, TestClient, sessionmaker[Session]],
+) -> None:
+    owner, _, _ = clients
+    run = _run_structured(owner, "target-plan-base-owner@example.com")
+    simulation_id = str(run["simulation_id"])
+    summary = run["summary"]
+    assert isinstance(summary, dict)
+    p50 = summary["percentiles"]["p50"]
+
+    response = owner.get(
+        f"/api/v1/simulations/{simulation_id}/target", params={"value": p50}
+    )
+    assert response.status_code == 200, response.text
+    plan = response.json()["plan"]
+    assert plan["status"] == "available"
+    assert plan["hit_count"] >= 50
+    assert plan["trajectory"][0]["revenue"] == pytest.approx(sum(([100.0] * 60)[:12]))
+
+
 def test_decision_reads_persisted_vectors_and_is_workspace_scoped(
     clients: tuple[TestClient, TestClient, sessionmaker[Session]], monkeypatch: pytest.MonkeyPatch
 ) -> None:

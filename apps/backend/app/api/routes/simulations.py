@@ -18,10 +18,12 @@ from app.api.schemas import (
     SimulationRunRequest,
     SimulationSummary,
     TargetComparisonResponse,
+    TargetPlanResponse,
     TargetResponse,
     TornadoItemResponse,
     TornadoResponse,
     TornadoSummary,
+    YearTargetResponse,
 )
 from app.db.models import (
     Role,
@@ -33,6 +35,7 @@ from app.db.models import (
     Startup,
 )
 from app.decision.catalog import describe
+from app.decision.target_plan import build_target_plan
 from app.decision.targets import analyze_target
 from app.insights.engine import build_insight
 from app.repositories.resources import get_revision, get_simulation
@@ -287,6 +290,16 @@ def read_target(
         raise HTTPException(
             status.HTTP_500_INTERNAL_SERVER_ERROR, "simulation_samples_integrity_error"
         ) from exc
+    revision = get_revision(
+        db, revision_id=simulation.scenario_revision_id, workspace_id=actor.workspace_id
+    )
+    monthly_revenue = (revision.canonical_inputs or {}).get("monthly_revenue") if revision else None
+    base_year_revenue = (
+        float(sum(monthly_revenue[:12]))
+        if isinstance(monthly_revenue, list) and monthly_revenue
+        else None
+    )
+    plan = build_target_plan(valuations, value, factors, base_year_revenue)
     return TargetResponse(
         simulation_id=simulation.id,
         result_hash=result.result_hash,
@@ -323,4 +336,16 @@ def read_target(
             )
             for item in target.comparisons
         ],
+        plan=TargetPlanResponse(
+            status=plan.status,
+            hit_count=plan.hit_count,
+            required_revenue_cagr=plan.required_revenue_cagr,
+            hit_ebitda_margin=plan.hit_ebitda_margin,
+            miss_revenue_cagr=plan.miss_revenue_cagr,
+            miss_ebitda_margin=plan.miss_ebitda_margin,
+            trajectory=[
+                YearTargetResponse(year=item.year, revenue=item.revenue)
+                for item in plan.trajectory
+            ],
+        ),
     )
