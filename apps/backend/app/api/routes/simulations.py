@@ -35,7 +35,7 @@ from app.db.models import (
     Startup,
 )
 from app.decision.catalog import describe
-from app.decision.target_plan import build_target_plan
+from app.decision.target_plan import base_year_revenue_from_inputs, build_target_plan
 from app.decision.targets import analyze_target
 from app.insights.engine import build_insight
 from app.repositories.resources import get_revision, get_simulation
@@ -293,11 +293,8 @@ def read_target(
     revision = get_revision(
         db, revision_id=simulation.scenario_revision_id, workspace_id=actor.workspace_id
     )
-    monthly_revenue = (revision.canonical_inputs or {}).get("monthly_revenue") if revision else None
-    base_year_revenue = (
-        float(sum(monthly_revenue[:12]))
-        if isinstance(monthly_revenue, list) and monthly_revenue
-        else None
+    base_year_revenue = base_year_revenue_from_inputs(
+        revision.canonical_inputs if revision else None
     )
     plan = build_target_plan(valuations, value, factors, base_year_revenue)
     return TargetResponse(

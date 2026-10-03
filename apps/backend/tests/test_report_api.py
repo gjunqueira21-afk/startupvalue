@@ -139,6 +139,9 @@ def test_report_download_uses_persisted_result_and_audit_metadata(
     assert "Fluxo de caixa vs. plano" in targeted_text
     assert "não relações de causa e efeito" in " ".join(targeted_text.split())
     assert targeted.content != first.content
+    # Target plan section renders (this fixture's inputs are FCFF-based, so no revenue CAGR
+    # factor is available for the plan; the reason is explained rather than a trajectory).
+    assert "Target Plan" in targeted_text
 
 
 def test_structured_report_formats_business_metrics_in_their_units(
@@ -223,6 +226,9 @@ def test_structured_report_formats_business_metrics_in_their_units(
     assert "WACC" in risk_page
     assert "Equity via DCF" in " ".join(pages)
     assert all("NOT AVAILABLE" not in page for page in pages)
+    # Operating-model inputs expose the revenue CAGR factor, so a target plan is produced.
+    joined = " ".join(pages)
+    assert "Target Plan" in joined
 
 
 def test_report_download_requires_session_and_workspace(

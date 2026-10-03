@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from math import isfinite
+from typing import Any
 
 import numpy as np
 
@@ -40,6 +41,14 @@ class TargetPlan:
 
 def _median(values: np.ndarray) -> float | None:
     return float(np.median(values)) if values.size else None
+
+
+def base_year_revenue_from_inputs(canonical_inputs: dict[str, Any] | None) -> float | None:
+    """Sum of the first 12 months of ``monthly_revenue``, or None when unavailable."""
+    monthly_revenue = (canonical_inputs or {}).get("monthly_revenue")
+    if not isinstance(monthly_revenue, list) or not monthly_revenue:
+        return None
+    return float(sum(monthly_revenue[:12]))
 
 
 def build_target_plan(

@@ -34,6 +34,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from app.decision.target_plan import MIN_HIT_SAMPLE
 from app.insights.formatting import compact_money
 
 from .insight_pdf import (
@@ -87,6 +88,23 @@ DRIVER_STATUS = {
     "insufficient_data": "dados insuficientes",
 }
 METHOD_STATUS = {"not_available": "NÃO DISPONÍVEL", "invalid": "INVÁLIDO"}
+MULTIPLES_REASON = {
+    "metrics_unavailable_for_input_mode": (
+        "Este modo de entrada não produz receita ou EBITDA no ano 5 dos cenários simulados, "
+        "etapa necessária para calcular múltiplos implícitos."
+    ),
+    "insufficient_eligible_scenarios": (
+        "Poucos cenários simulados têm valuation e a métrica de referência positivos ao mesmo "
+        "tempo para estimar múltiplos de forma confiável."
+    ),
+}
+MULTIPLES_DISCLAIMER = (
+    "Múltiplos implícitos nas suas premissas — não são múltiplos de mercado."
+)
+TARGET_PLAN_DISCLAIMER = (
+    "Essas diferenças descrevem associações entre os cenários simulados, não relações de "
+    "causa e efeito."
+)
 
 
 class _NumberedCanvas(Canvas):
@@ -831,6 +849,153 @@ def _target(
     return story
 
 
+def _implied_multiples(
+    data: ReportData, styles: dict[str, ParagraphStyle], numbering: Numbering
+) -> list[Any]:
+    """Implied value/revenue and value/EBITDA multiples; absent on pre-1.4 results."""
+    section = data.implied_multiples
+    if section is None:
+        return []
+    story = _header(numbering, "Múltiplos implícitos", "Implied Multiples", room=45 * mm)
+    if section.status != "available":
+        reason = MULTIPLES_REASON.get(
+            section.reason or "", "Múltiplos implícitos não disponíveis para esta simulação."
+        )
+        story.append(Paragraph(escape(reason), styles["body"]))
+        return story
+    rows: list[list[Any]] = []
+    notes: list[str] = []
+    for label, band in (
+        ("Valor / Receita", section.value_to_revenue),
+        ("Valor / EBITDA", section.value_to_ebitda),
+    ):
+        if band is None:
+            rows.append([label, "N/A", "N/A", "N/A"])
+            continue
+        rows.append(
+            [
+                label,
+                f"{band.p25:.1f}x".replace(".", ","),
+                f"{band.p50:.1f}x".replace(".", ","),
+                f"{band.p75:.1f}x".replace(".", ","),
+            ]
+        )
+        total = band.eligible_count + band.excluded_count
+        notes.append(
+            f"{label}: baseado em {format_integer(band.eligible_count)} de "
+            f"{format_integer(total)} cenários elegíveis."
+        )
+    story.append(
+        data_table(
+            ["Múltiplo", "P25", "P50", "P75"],
+            rows,
+            [60 * mm, 36 * mm, 36 * mm, 36 * mm],
+            styles,
+            numeric=[1, 2, 3],
+        )
+    )
+    for note in notes:
+        story.append(Paragraph(escape(note), styles["table_note"]))
+    story.append(gap(GAP_M))
+    story.append(callout([Paragraph(escape(MULTIPLES_DISCLAIMER), styles["small"])]))
+    return story
+
+
+def _target_plan_section(
+    data: ReportData, styles: dict[str, ParagraphStyle], numbering: Numbering
+) -> list[Any]:
+    """Reverse-engineered plan (required growth and margin) for the configured target."""
+    section = data.target_plan
+    if section is None:
+        return []
+    story = _header(numbering, "Plano para a meta", "Target Plan", room=60 * mm)
+    if section.status == "insufficient_hits":
+        story.append(
+            Paragraph(
+                f"Apenas {format_integer(section.hit_count)} cenários simulados atingem a "
+                f"meta, abaixo do mínimo de {MIN_HIT_SAMPLE} necessário para estimar um plano "
+                "de forma confiável.",
+                styles["body"],
+            )
+        )
+        return story
+    if section.status == "not_available_for_inputs":
+        story.append(
+            Paragraph(
+                "Este modo de entrada não produz os indicadores necessários para reverter um "
+                "plano a partir da meta informada.",
+                styles["body"],
+            )
+        )
+        return story
+    currency = data.company.currency
+    cells = (
+        (
+            "CAGR DE RECEITA NECESSÁRIO",
+            format_percent(section.required_revenue_cagr)
+            if section.required_revenue_cagr is not None
+            else "N/A",
+            "Mediana nos cenários que atingem a meta",
+        ),
+        (
+            "MARGEM EBITDA ALVO",
+            format_percent(section.hit_ebitda_margin)
+            if section.hit_ebitda_margin is not None
+            else "N/A",
+            "Ano 5 · mediana nos cenários que atingem a meta",
+        ),
+    )
+    widths = [span(6), span(6)]
+    story.append(
+        stat_strip(
+            [
+                kpi_cell(label, value, caption, styles, width - 12, label_style="stat_label")
+                for (label, value, caption), width in zip(cells, widths, strict=True)
+            ],
+            widths,
+        )
+    )
+    story.append(gap(GAP_M))
+    if section.trajectory:
+        rows = [
+            [f"Ano {point.year}", format_money(point.revenue, currency)]
+            for point in section.trajectory
+        ]
+        story.append(
+            KeepTogether(
+                [
+                    Paragraph("Trajetória de referência da receita", styles["h2"]),
+                    data_table(
+                        ["Ano", "Receita de referência"],
+                        rows,
+                        [span(6) - 40 * mm, 40 * mm],
+                        styles,
+                        numeric=[1],
+                    ),
+                ]
+            )
+        )
+        story.append(gap(GAP_S))
+    contrast_parts: list[str] = []
+    if section.required_revenue_cagr is not None and section.miss_revenue_cagr is not None:
+        contrast_parts.append(
+            f"CAGR de receita de {format_percent(section.required_revenue_cagr)} nos "
+            f"cenários que atingem a meta, contra {format_percent(section.miss_revenue_cagr)} "
+            "nos demais"
+        )
+    if section.hit_ebitda_margin is not None and section.miss_ebitda_margin is not None:
+        contrast_parts.append(
+            f"margem EBITDA do ano 5 de {format_percent(section.hit_ebitda_margin)} nos "
+            f"cenários que atingem a meta, contra {format_percent(section.miss_ebitda_margin)} "
+            "nos demais"
+        )
+    if contrast_parts:
+        story.append(Paragraph(escape("; ".join(contrast_parts) + "."), styles["body"]))
+        story.append(gap(GAP_S))
+    story.append(callout([Paragraph(escape(TARGET_PLAN_DISCLAIMER), styles["small"])]))
+    return story
+
+
 def _risk(
     data: ReportData, styles: dict[str, ParagraphStyle], numbering: Numbering
 ) -> list[Any]:
@@ -990,6 +1155,12 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
         )
     story.extend([PageBreak(), *_drivers(data, styles, numbering)])
     story.extend([PageBreak(), *_target(data, styles, numbering)])
+    multiples_story = _implied_multiples(data, styles, numbering)
+    if multiples_story:
+        story.extend([PageBreak(), *multiples_story])
+    plan_story = _target_plan_section(data, styles, numbering)
+    if plan_story:
+        story.extend([PageBreak(), *plan_story])
     story.extend([PageBreak(), *_risk(data, styles, numbering)])
     story.extend([PageBreak(), *_methodology(data, styles, numbering)])
     if long_assumptions:

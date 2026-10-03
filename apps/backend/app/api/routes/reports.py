@@ -17,6 +17,7 @@ from app.db.models import (
     SimulationStatus,
     Startup,
 )
+from app.decision.target_plan import TargetPlan, base_year_revenue_from_inputs, build_target_plan
 from app.decision.targets import analyze_target
 from app.insights.engine import InsightReport, build_insight, condition_variables
 from app.reports import build_report_pdf
@@ -69,6 +70,7 @@ def download_simulation_report(
     persisted = result.summary.get("drivers")
     ranking: dict[str, Any] | None = persisted if isinstance(persisted, dict) else None
     target_analysis = None
+    target_plan: TargetPlan | None = None
     insight: InsightReport | None = None
     if snapshot is None and target is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "simulation_samples_unavailable")
@@ -82,6 +84,12 @@ def download_simulation_report(
             if target is not None:
                 target_analysis = analyze_target(
                     valuations, target, condition_variables(factors)
+                )
+                target_plan = build_target_plan(
+                    valuations,
+                    target,
+                    factors,
+                    base_year_revenue_from_inputs(revision.canonical_inputs),
                 )
             # Same deterministic engine as GET /insight, so PDF and dashboard read alike.
             insight = build_insight(
@@ -105,6 +113,7 @@ def download_simulation_report(
         drivers=ranking,
         target=target_analysis,
         insight=insight,
+        target_plan=target_plan,
     )
     pdf = build_report_pdf(data)
     record_event(

@@ -112,6 +112,39 @@ def report_payload() -> dict[str, object]:
                 }
             ],
         },
+        "implied_multiples": {
+            "status": "available",
+            "basis": "equity_dcf_over_year5_metric",
+            "value_to_revenue": {
+                "p25": 6.2,
+                "p50": 8.4,
+                "p75": 11.1,
+                "eligible_count": 9_400,
+                "excluded_count": 600,
+            },
+            "value_to_ebitda": {
+                "p25": 18.5,
+                "p50": 24.0,
+                "p75": 31.2,
+                "eligible_count": 9_100,
+                "excluded_count": 900,
+            },
+        },
+        "target_plan": {
+            "status": "available",
+            "hit_count": 2_740,
+            "required_revenue_cagr": 0.30,
+            "hit_ebitda_margin": 0.22,
+            "miss_revenue_cagr": 0.14,
+            "miss_ebitda_margin": 0.11,
+            "trajectory": [
+                {"year": 1, "revenue": 3_200_000.0},
+                {"year": 2, "revenue": 4_160_000.0},
+                {"year": 3, "revenue": 5_408_000.0},
+                {"year": 4, "revenue": 7_030_400.0},
+                {"year": 5, "revenue": 9_139_520.0},
+            ],
+        },
         "risks": {
             "warnings": ("Projeções de longo prazo possuem dispersão material.",),
             "limitations": ("O relatório não constitui recomendação de investimento.",),
@@ -160,6 +193,39 @@ def test_report_pdf_uses_persisted_result_values_and_audit_metadata() -> None:
     assert "10000" in text
     assert "Revenue Year 5 apresentou a associação" in text
     assert "não implica causalidade" in text
+    assert "Implied Multiples" in text
+    assert "Target Plan" in text
+    assert "8,4x" in text
+    assert "24,0x" in text
+    assert "baseado em 9.400 de 10.000 cenários elegíveis" in text
+    assert "30,0%" in text
+    assert "22,0%" in text
+    assert "Ano 5" in text
+    assert "R$ 9.139.520,00" in text
+    assert "não são múltiplos de mercado" in text
+    assert "não relações de causa e efeito" in text
+
+
+def test_report_pdf_omits_new_sections_when_absent() -> None:
+    payload = report_payload()
+    del payload["implied_multiples"]
+    del payload["target_plan"]
+    data = ReportData.model_validate(payload)
+
+    pdf_bytes = build_report_pdf(data)
+
+    assert pdf_bytes.startswith(b"%PDF")
+    reader = PdfReader(BytesIO(pdf_bytes))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "Implied Multiples" not in text
+    assert "Target Plan" not in text
+
+
+def test_multiple_band_rejects_zero_eligible_count() -> None:
+    from app.reports.schema import MultipleBand
+
+    with pytest.raises(ValidationError):
+        MultipleBand(p25=1.0, p50=2.0, p75=3.0, eligible_count=0, excluded_count=0)
 
 
 def test_report_pdf_is_byte_deterministic_for_same_payload() -> None:

@@ -218,6 +218,37 @@ class TornadoSection(FrozenModel):
     items: tuple[TornadoBar, ...] = Field(min_length=1)
 
 
+class MultipleBand(FrozenModel):
+    p25: FiniteNumber
+    p50: FiniteNumber
+    p75: FiniteNumber
+    eligible_count: int = Field(ge=1)
+    excluded_count: int = Field(ge=0)
+
+
+class ImpliedMultiplesSection(FrozenModel):
+    status: Literal["available", "not_available"]
+    reason: str | None = Field(default=None, max_length=120)
+    basis: str = Field(min_length=1, max_length=120)
+    value_to_revenue: MultipleBand | None = None
+    value_to_ebitda: MultipleBand | None = None
+
+
+class TargetPlanYear(FrozenModel):
+    year: int = Field(ge=1, le=10)
+    revenue: FiniteNumber
+
+
+class TargetPlanSection(FrozenModel):
+    status: Literal["available", "insufficient_hits", "not_available_for_inputs"]
+    hit_count: int = Field(ge=0)
+    required_revenue_cagr: FiniteNumber | None = None
+    hit_ebitda_margin: FiniteNumber | None = None
+    miss_revenue_cagr: FiniteNumber | None = None
+    miss_ebitda_margin: FiniteNumber | None = None
+    trajectory: tuple[TargetPlanYear, ...] = ()
+
+
 class ReportData(FrozenModel):
     audit: AuditMetadata
     company: CompanySnapshot
@@ -230,6 +261,8 @@ class ReportData(FrozenModel):
     risks: RiskSummary = Field(default_factory=RiskSummary)
     insight: ExecutiveInsight | None = None
     tornado: TornadoSection | None = None
+    implied_multiples: ImpliedMultiplesSection | None = None
+    target_plan: TargetPlanSection | None = None
     disclaimer: str = Field(min_length=1, max_length=2000)
 
     @model_validator(mode="after")

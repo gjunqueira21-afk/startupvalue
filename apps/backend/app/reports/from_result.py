@@ -6,6 +6,7 @@ from typing import Any
 
 from app.db.models import Scenario, ScenarioRevision, Simulation, SimulationResult, Startup
 from app.decision.catalog import describe
+from app.decision.target_plan import TargetPlan
 from app.decision.targets import ConditionalStatistics
 from app.decision.targets import TargetAnalysis as CalculatedTargetAnalysis
 from app.insights.engine import InsightReport
@@ -14,7 +15,7 @@ from app.services.simulation import with_uncertainty
 
 from .schema import ReportData
 
-REPORT_TEMPLATE_VERSION = "1.2.0"
+REPORT_TEMPLATE_VERSION = "1.3.0"
 BASIS_LABELS = {"DCF equity value (signed)": "Equity via DCF · inclui valores negativos"}
 
 
@@ -170,6 +171,7 @@ def report_from_result(
     drivers: dict[str, Any] | None = None,
     target: CalculatedTargetAnalysis | None = None,
     insight: InsightReport | None = None,
+    target_plan: TargetPlan | None = None,
 ) -> ReportData:
     """Use saved values only; no valuation or random draw occurs here."""
 
@@ -256,6 +258,27 @@ def report_from_result(
         ),
         "insight": _insight_payload(insight, ranking) if insight is not None else None,
         "tornado": _tornado_payload(summary) if insight is not None else None,
+        "implied_multiples": (
+            summary.get("implied_multiples")
+            if isinstance(summary.get("implied_multiples"), dict)
+            else None
+        ),
+        "target_plan": (
+            {
+                "status": target_plan.status,
+                "hit_count": target_plan.hit_count,
+                "required_revenue_cagr": target_plan.required_revenue_cagr,
+                "hit_ebitda_margin": target_plan.hit_ebitda_margin,
+                "miss_revenue_cagr": target_plan.miss_revenue_cagr,
+                "miss_ebitda_margin": target_plan.miss_ebitda_margin,
+                "trajectory": [
+                    {"year": point.year, "revenue": point.revenue}
+                    for point in target_plan.trajectory
+                ],
+            }
+            if target_plan is not None
+            else None
+        ),
         "risks": {
             "limitations": (
                 "As premissas e a distribuição são estimativas, não preços de transação.",
