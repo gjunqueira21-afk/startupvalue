@@ -12,12 +12,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.entitlements import PlanTier, set_workspace_plan
 from app.db.base import Base, get_db
 from app.main import app
 
 
 @pytest.fixture
-def clients() -> Iterator[tuple[TestClient, TestClient, TestClient]]:
+def clients() -> Iterator[tuple[TestClient, TestClient, TestClient, sessionmaker[Session]]]:
     engine = create_engine(
         "sqlite+pysqlite://",
         connect_args={"check_same_thread": False},
@@ -32,13 +33,13 @@ def clients() -> Iterator[tuple[TestClient, TestClient, TestClient]]:
 
     app.dependency_overrides[get_db] = override_db
     with TestClient(app) as owner, TestClient(app) as outsider, TestClient(app) as anonymous:
-        yield owner, outsider, anonymous
+        yield owner, outsider, anonymous, factory
     app.dependency_overrides.clear()
     Base.metadata.drop_all(engine)
     engine.dispose()
 
 
-def _signup(client: TestClient, name: str) -> None:
+def _signup(client: TestClient, name: str) -> dict[str, object]:
     response = client.post(
         "/api/v1/auth/signup",
         json={"name": name, "email": f"{name}@example.com", "password": "long-safe-password"},
@@ -47,6 +48,13 @@ def _signup(client: TestClient, name: str) -> None:
     csrf = client.get("/api/v1/auth/csrf")
     assert csrf.status_code == 200, csrf.text
     client.headers.update({"X-CSRF-Token": csrf.json()["csrf_token"]})
+    return response.json()  # type: ignore[no-any-return]
+
+
+def _upgrade_plan(factory: sessionmaker[Session], workspace_id: str, plan: PlanTier) -> None:
+    with factory() as db:
+        set_workspace_plan(db, workspace_id=workspace_id, plan=plan, actor_id=None)
+        db.commit()
 
 
 def _simulate(owner: TestClient) -> dict[str, object]:
@@ -94,10 +102,13 @@ def _simulate(owner: TestClient) -> dict[str, object]:
 
 
 def test_report_download_uses_persisted_result_and_audit_metadata(
-    clients: tuple[TestClient, TestClient, TestClient],
+    clients: tuple[TestClient, TestClient, TestClient, sessionmaker[Session]],
 ) -> None:
-    owner, _, _ = clients
-    _signup(owner, "owner")
+    owner, _, _, factory = clients
+    session = _signup(owner, "owner")
+    # The target-plan section is empresario+; elevate so this PDF exercises it
+    # rather than the free-tier gate added for entitlement enforcement.
+    _upgrade_plan(factory, str(session["workspace_id"]), PlanTier.empresario)
     saved = _simulate(owner)
     simulation_id = str(saved["simulation_id"])
 
@@ -145,10 +156,13 @@ def test_report_download_uses_persisted_result_and_audit_metadata(
 
 
 def test_structured_report_formats_business_metrics_in_their_units(
-    clients: tuple[TestClient, TestClient, TestClient],
+    clients: tuple[TestClient, TestClient, TestClient, sessionmaker[Session]],
 ) -> None:
-    owner, _, _ = clients
-    _signup(owner, "structured")
+    owner, _, _, factory = clients
+    session = _signup(owner, "structured")
+    # The target-plan section is empresario+; elevate so this PDF exercises it
+    # rather than the free-tier gate added for entitlement enforcement.
+    _upgrade_plan(factory, str(session["workspace_id"]), PlanTier.empresario)
     startup = owner.post("/api/v1/startups", json={"name": "Receita Co", "currency": "BRL"})
     scenario = owner.post(
         f"/api/v1/startups/{startup.json()['id']}/scenarios",
@@ -232,9 +246,9 @@ def test_structured_report_formats_business_metrics_in_their_units(
 
 
 def test_report_download_requires_session_and_workspace(
-    clients: tuple[TestClient, TestClient, TestClient],
+    clients: tuple[TestClient, TestClient, TestClient, sessionmaker[Session]],
 ) -> None:
-    owner, outsider, anonymous = clients
+    owner, outsider, anonymous, _ = clients
     _signup(owner, "owner")
     _signup(outsider, "outsider")
     simulation_id = _simulate(owner)["simulation_id"]

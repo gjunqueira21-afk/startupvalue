@@ -172,6 +172,7 @@ def report_from_result(
     target: CalculatedTargetAnalysis | None = None,
     insight: InsightReport | None = None,
     target_plan: TargetPlan | None = None,
+    include_multiples: bool = True,
 ) -> ReportData:
     """Use saved values only; no valuation or random draw occurs here."""
 
@@ -260,7 +261,7 @@ def report_from_result(
         "tornado": _tornado_payload(summary) if insight is not None else None,
         "implied_multiples": (
             summary.get("implied_multiples")
-            if isinstance(summary.get("implied_multiples"), dict)
+            if include_multiples and isinstance(summary.get("implied_multiples"), dict)
             else None
         ),
         "target_plan": (

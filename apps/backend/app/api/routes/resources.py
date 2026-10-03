@@ -16,6 +16,7 @@ from app.api.schemas import (
     StartupCreate,
     StartupResponse,
 )
+from app.core.entitlements import workspace_entitlements
 from app.db.models import Role, Scenario, ScenarioRevision, Startup
 from app.repositories.resources import get_scenario, get_startup
 from app.services.audit import record_event
@@ -31,6 +32,15 @@ def _require_editor(actor: Actor) -> None:
 @router.post("/startups", response_model=StartupResponse, status_code=status.HTTP_201_CREATED)
 def create_startup(payload: StartupCreate, db: Database, actor: Actor) -> Startup:
     _require_editor(actor)
+    ent = workspace_entitlements(db, actor.workspace_id)
+    if ent.max_startups is not None:
+        existing = db.scalar(
+            select(func.count())
+            .select_from(Startup)
+            .where(Startup.workspace_id == actor.workspace_id)
+        )
+        if existing >= ent.max_startups:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "plan_limit_startups")
     startup = Startup(
         workspace_id=actor.workspace_id,
         name=payload.name.strip(),

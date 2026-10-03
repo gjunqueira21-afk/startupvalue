@@ -8,6 +8,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.entitlements import PlanTier, set_workspace_plan
 from app.db.base import Base, get_db
 from app.db.models import SimulationResult, SimulationSamples
 from app.main import app
@@ -81,12 +82,27 @@ def _run(client: TestClient, email: str) -> dict[str, object]:
     )
 
 
-def _run_structured(client: TestClient, email: str) -> dict[str, object]:
-    _post(
+def _run_structured(
+    client: TestClient,
+    email: str,
+    factory: sessionmaker[Session] | None = None,
+) -> dict[str, object]:
+    session = _post(
         client,
         "/api/v1/auth/signup",
         {"name": "Target Plan Founder", "email": email, "password": "strong-password-123"},
     )
+    if factory is not None:
+        # The target-plan section is empresario+; elevate so these tests exercise it
+        # rather than the free-tier gate added for entitlement enforcement.
+        with factory() as db:
+            set_workspace_plan(
+                db,
+                workspace_id=str(session["workspace_id"]),
+                plan=PlanTier.empresario,
+                actor_id=None,
+            )
+            db.commit()
     startup = _post(client, "/api/v1/startups", {"name": "Target Plan Co"})
     scenario = _post(
         client,
@@ -123,8 +139,8 @@ def _run_structured(client: TestClient, email: str) -> dict[str, object]:
 def test_target_response_includes_plan_for_structured_inputs(
     clients: tuple[TestClient, TestClient, sessionmaker[Session]],
 ) -> None:
-    owner, _, _ = clients
-    run = _run_structured(owner, "target-plan-owner@example.com")
+    owner, _, factory = clients
+    run = _run_structured(owner, "target-plan-owner@example.com", factory)
     simulation_id = str(run["simulation_id"])
     summary = run["summary"]
     assert isinstance(summary, dict)
@@ -144,8 +160,8 @@ def test_target_response_includes_plan_for_structured_inputs(
 def test_target_plan_base_revenue_comes_from_revision_year_one(
     clients: tuple[TestClient, TestClient, sessionmaker[Session]],
 ) -> None:
-    owner, _, _ = clients
-    run = _run_structured(owner, "target-plan-base-owner@example.com")
+    owner, _, factory = clients
+    run = _run_structured(owner, "target-plan-base-owner@example.com", factory)
     simulation_id = str(run["simulation_id"])
     summary = run["summary"]
     assert isinstance(summary, dict)

@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import select
 
 from app.api.dependencies import Actor, Database
+from app.core.entitlements import workspace_entitlements
 from app.db.models import (
     Scenario,
     ScenarioRevision,
@@ -40,6 +41,7 @@ def download_simulation_report(
     actor: Actor,
     target: Annotated[float | None, Query(allow_inf_nan=False)] = None,
 ) -> Response:
+    ent = workspace_entitlements(db, actor.workspace_id)
     row = db.execute(
         select(Simulation, SimulationResult, ScenarioRevision, Scenario, Startup)
         .join(SimulationResult, SimulationResult.simulation_id == Simulation.id)
@@ -85,12 +87,13 @@ def download_simulation_report(
                 target_analysis = analyze_target(
                     valuations, target, condition_variables(factors)
                 )
-                target_plan = build_target_plan(
-                    valuations,
-                    target,
-                    factors,
-                    base_year_revenue_from_inputs(revision.canonical_inputs),
-                )
+                if ent.target_plan_section:
+                    target_plan = build_target_plan(
+                        valuations,
+                        target,
+                        factors,
+                        base_year_revenue_from_inputs(revision.canonical_inputs),
+                    )
             # Same deterministic engine as GET /insight, so PDF and dashboard read alike.
             insight = build_insight(
                 summary=with_uncertainty(result.summary),
@@ -114,6 +117,7 @@ def download_simulation_report(
         target=target_analysis,
         insight=insight,
         target_plan=target_plan,
+        include_multiples=ent.implied_multiples,
     )
     pdf = build_report_pdf(data)
     record_event(

@@ -25,6 +25,7 @@ from app.api.schemas import (
     TornadoSummary,
     YearTargetResponse,
 )
+from app.core.entitlements import workspace_entitlements
 from app.db.models import (
     Role,
     Scenario,
@@ -71,6 +72,12 @@ def _response(
     db: Database, simulation: Simulation, result: SimulationResult | None
 ) -> SimulationResponse:
     company_name, scenario_name, currency = _identity(db, simulation)
+    ent = workspace_entitlements(db, simulation.workspace_id)
+    summary_payload = None
+    if result is not None:
+        summary_payload = with_uncertainty(result.summary)
+        if not ent.implied_multiples:
+            summary_payload.pop("implied_multiples", None)
     return SimulationResponse(
         company_name=company_name,
         scenario_name=scenario_name,
@@ -82,8 +89,8 @@ def _response(
         seed=simulation.seed,
         simulation_count=simulation.simulation_count,
         status=simulation.status.value,
-        summary=SimulationSummary.model_validate(with_uncertainty(result.summary))
-        if result
+        summary=SimulationSummary.model_validate(summary_payload)
+        if summary_payload is not None
         else None,
         result_hash=result.result_hash if result else None,
         created_at=simulation.created_at,
@@ -120,6 +127,9 @@ def _run(
 ) -> SimulationResponse:
     if actor.role not in {Role.owner, Role.admin, Role.analyst}:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "action_not_allowed")
+    ent = workspace_entitlements(db, actor.workspace_id)
+    if payload.simulation_count > ent.max_scenarios_per_run:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "plan_limit_scenarios")
     revision = get_revision(db, revision_id=revision_id, workspace_id=actor.workspace_id)
     if revision is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "scenario_revision_not_found")
@@ -283,6 +293,7 @@ def read_target(
     value: Annotated[float, Query(allow_inf_nan=False)],
 ) -> TargetResponse:
     simulation, result, snapshot = _decision_source(simulation_id, db, actor)
+    ent = workspace_entitlements(db, actor.workspace_id)
     try:
         valuations, factors = load_sample_vectors(snapshot, result=result, simulation=simulation)
         target = analyze_target(valuations, value, factors)
@@ -290,13 +301,15 @@ def read_target(
         raise HTTPException(
             status.HTTP_500_INTERNAL_SERVER_ERROR, "simulation_samples_integrity_error"
         ) from exc
-    revision = get_revision(
-        db, revision_id=simulation.scenario_revision_id, workspace_id=actor.workspace_id
-    )
-    base_year_revenue = base_year_revenue_from_inputs(
-        revision.canonical_inputs if revision else None
-    )
-    plan = build_target_plan(valuations, value, factors, base_year_revenue)
+    plan = None
+    if ent.target_plan_section:
+        revision = get_revision(
+            db, revision_id=simulation.scenario_revision_id, workspace_id=actor.workspace_id
+        )
+        base_year_revenue = base_year_revenue_from_inputs(
+            revision.canonical_inputs if revision else None
+        )
+        plan = build_target_plan(valuations, value, factors, base_year_revenue)
     return TargetResponse(
         simulation_id=simulation.id,
         result_hash=result.result_hash,
@@ -333,16 +346,20 @@ def read_target(
             )
             for item in target.comparisons
         ],
-        plan=TargetPlanResponse(
-            status=plan.status,
-            hit_count=plan.hit_count,
-            required_revenue_cagr=plan.required_revenue_cagr,
-            hit_ebitda_margin=plan.hit_ebitda_margin,
-            miss_revenue_cagr=plan.miss_revenue_cagr,
-            miss_ebitda_margin=plan.miss_ebitda_margin,
-            trajectory=[
-                YearTargetResponse(year=item.year, revenue=item.revenue)
-                for item in plan.trajectory
-            ],
+        plan=(
+            TargetPlanResponse(
+                status=plan.status,
+                hit_count=plan.hit_count,
+                required_revenue_cagr=plan.required_revenue_cagr,
+                hit_ebitda_margin=plan.hit_ebitda_margin,
+                miss_revenue_cagr=plan.miss_revenue_cagr,
+                miss_ebitda_margin=plan.miss_ebitda_margin,
+                trajectory=[
+                    YearTargetResponse(year=item.year, revenue=item.revenue)
+                    for item in plan.trajectory
+                ],
+            )
+            if plan is not None
+            else None
         ),
     )

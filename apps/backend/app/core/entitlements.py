@@ -11,6 +11,7 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Workspace
@@ -85,6 +86,16 @@ def entitlements_for(plan_value: str | None) -> Entitlements:
     except ValueError:
         plan = PlanTier.free
     return _MATRIX[plan]
+
+
+def workspace_entitlements(db: Session, workspace_id: str) -> Entitlements:
+    """Resolve a workspace's persisted plan into its entitlement matrix.
+
+    Single scalar select, no join; unknown/missing plans resolve to free via
+    ``entitlements_for``.
+    """
+    plan = db.scalar(select(Workspace.plan).where(Workspace.id == workspace_id))
+    return entitlements_for(plan)
 
 
 def set_workspace_plan(
