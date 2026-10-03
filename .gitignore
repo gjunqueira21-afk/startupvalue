@@ -18,5 +18,8 @@ backups/
 tmp/
 apps/backend/tmp/
 .playwright-cli/
+test-results/
+playwright-report/
+blob-report/
 *.log
 .DS_Store

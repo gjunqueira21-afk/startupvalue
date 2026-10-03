@@ -6,7 +6,8 @@
     "dev": "npm --workspace apps/frontend run dev",
     "build": "npm --workspace apps/frontend run build",
     "lint": "npm --workspace apps/frontend run lint",
-    "test:frontend": "npm --workspace apps/frontend run test"
+    "test:frontend": "npm --workspace apps/frontend run test",
+    "test:e2e": "npm --workspace apps/frontend run test:e2e"
   },
   "engines": {"node": ">=24.0.0"}
 }
