@@ -1,0 +1,182 @@
+/* Admin panel. Tokens come from app/globals.css (:root). */
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.metricCard {
+  padding: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.metricCard span {
+  display: block;
+  color: var(--muted);
+  font: 8px var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.metricCard strong {
+  display: block;
+  margin: 10px 0 2px;
+  font-size: 29px;
+}
+
+.metricCard small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.planBreakdown {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.planBreakdown div {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--secondary);
+  font-size: 11px;
+}
+
+.planBreakdown strong {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.section {
+  margin-top: 36px;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.sectionHeader h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.csvLink {
+  color: var(--green);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+}
+
+.table th {
+  color: var(--muted);
+  font: 9px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.searchForm {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.searchForm input {
+  min-width: 260px;
+  height: 42px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.resultRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.resultRow:last-child {
+  border-bottom: 0;
+}
+
+.resultInfo strong {
+  display: block;
+  font-size: 13px;
+}
+
+.resultInfo small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.resultActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.resultActions select {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.confirmBox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #246448;
+  background: #35e6a10a;
+  width: 100%;
+}
+
+.confirmBox p {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 12px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 12px;
+}

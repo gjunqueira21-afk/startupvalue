@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getSession } from "@/lib/api/auth";
 import { getEntitlements } from "@/lib/api/branding";
 import { Brand } from "./brand";
-import { BuildingIcon, ChartIcon, FileIcon, GridIcon, PaletteIcon } from "./icons";
+import { BuildingIcon, ChartIcon, FileIcon, GridIcon, PaletteIcon, ShieldIcon } from "./icons";
 import { SessionSummary } from "./session-summary";
 
 const navigation = [
@@ -15,6 +16,7 @@ const navigation = [
 ] as const;
 
 const BRANDING_LINK = ["/app/settings/branding", "Marca do relatório", PaletteIcon] as const;
+const ADMIN_LINK = ["/app/admin", "Admin", ShieldIcon] as const;
 
 // Session-scoped cache so repeat /app page loads render the branding nav
 // link immediately instead of popping in once the entitlements fetch
@@ -38,6 +40,28 @@ function cacheWhiteLabel(value: boolean): void {
   }
 }
 
+// Same pattern as the white-label cache above, keyed on the session's
+// `is_platform_admin` flag instead of an entitlement. This is a nav-
+// visibility convenience only — the admin page itself re-checks via the
+// backend's `require_platform_admin` on every request.
+const PLATFORM_ADMIN_CACHE_KEY = "qv.platformAdmin";
+
+function cachedPlatformAdmin(): boolean {
+  try {
+    return sessionStorage.getItem(PLATFORM_ADMIN_CACHE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function cachePlatformAdmin(value: boolean): void {
+  try {
+    sessionStorage.setItem(PLATFORM_ADMIN_CACHE_KEY, value ? "1" : "0");
+  } catch {
+    // Ignore — the link just won't be cached for next load.
+  }
+}
+
 export function AppShell({ children, active = "/app" }: { children: React.ReactNode; active?: string }) {
   // Only consultor/escritório plans see the branding settings link — the page
   // itself re-checks entitlements (and the role requirement) server-side, so
@@ -46,6 +70,9 @@ export function AppShell({ children, active = "/app" }: { children: React.ReactN
   // session (no cache yet) can still show the link popping in after the
   // fetch resolves.
   const [whiteLabel, setWhiteLabel] = useState(cachedWhiteLabel);
+  // Platform admin flag, cached the same way as above — see session-summary.tsx /
+  // lib/api/auth.ts for the other consumer of `getSession()`.
+  const [platformAdmin, setPlatformAdmin] = useState(cachedPlatformAdmin);
 
   useEffect(() => {
     let mounted = true;
@@ -57,12 +84,24 @@ export function AppShell({ children, active = "/app" }: { children: React.ReactN
       .catch(() => {
         if (mounted) setWhiteLabel(false);
       });
+    getSession()
+      .then((session) => {
+        cachePlatformAdmin(session.is_platform_admin);
+        if (mounted) setPlatformAdmin(session.is_platform_admin);
+      })
+      .catch(() => {
+        if (mounted) setPlatformAdmin(false);
+      });
     return () => {
       mounted = false;
     };
   }, []);
 
-  const items = whiteLabel ? [...navigation, BRANDING_LINK] : navigation;
+  const items = [
+    ...navigation,
+    ...(whiteLabel ? [BRANDING_LINK] : []),
+    ...(platformAdmin ? [ADMIN_LINK] : []),
+  ];
 
   return (
     <div className="app-shell">

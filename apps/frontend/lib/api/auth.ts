@@ -7,6 +7,8 @@ export interface SessionResponse {
   email: string;
   role: string;
   expires_at: string;
+  /** Platform-level admin flag (Task 18/19) — gates the Admin nav link, not any workspace role. */
+  is_platform_admin: boolean;
 }
 
 export function signup(payload: {
