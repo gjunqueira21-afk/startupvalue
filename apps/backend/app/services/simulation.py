@@ -23,6 +23,7 @@ from app.db.models import (
     Startup,
 )
 from app.decision.catalog import split_by_role
+from app.decision.multiples import compute_implied_multiples, implied_multiples_payload
 from app.decision.sensitivity import DriverRanking, rank_drivers
 from app.decision.uncertainty import assess_uncertainty
 from app.services.valuation_model import (
@@ -34,7 +35,7 @@ from app.services.valuation_model import equity_values as model_equity_values
 from app.services.vc_analysis import analyze_vc_profile
 from app.simulation.statistics import DistributionSummary, summarize
 
-RESULT_SCHEMA_VERSION = "1.3.0"
+RESULT_SCHEMA_VERSION = "1.4.0"
 
 
 def _summary_payload(
@@ -291,6 +292,9 @@ def execute_synchronously(
     )
     summary["vc_method"] = _vc_profile_summary(
         db, workspace_id=workspace_id, revision_id=revision_id
+    )
+    summary["implied_multiples"] = implied_multiples_payload(
+        compute_implied_multiples(equity_values, paths.revenue_year5, paths.ebitda_year5)
     )
 
     names, sample_payload, payload_hash = _snapshot_payload(equity_values, realized_inputs)

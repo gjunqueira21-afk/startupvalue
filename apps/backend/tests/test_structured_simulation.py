@@ -172,7 +172,7 @@ def test_service_uses_normalized_terminal_and_persists_economic_drivers() -> Non
     assert factors["ebitda_margin_year5_operating"][0] == pytest.approx((650.0 - 240.0) / 1300.0)
     assert factors["revenue_cagr_operating"][0] == pytest.approx((1300.0 / 1200.0) ** 0.25 - 1)
     assert result.summary["vc_method"]["status"] == "unavailable"
-    assert result.schema_version == "1.3.0"
+    assert result.schema_version == "1.4.0"
     engine.dispose()
 
 
@@ -290,4 +290,52 @@ def test_vc_method_is_derived_from_saved_profile_in_same_workspace() -> None:
         assert vc["post_money"] == pytest.approx(vc["present_exit_equity"])
         assert vc["pre_money"] == pytest.approx(vc["post_money"] - 500_000)
         assert vc["target_ownership_meets_return"] is False
+    engine.dispose()
+
+
+def test_structured_simulation_persists_implied_multiples() -> None:
+    engine = create_engine("sqlite+pysqlite://")
+    Base.metadata.create_all(engine)
+    inputs = _structured_inputs()
+    request = SimulationRunRequest(seed=471829, simulation_count=1000)
+    with Session(engine) as db:
+        _, result = execute_synchronously(
+            db,
+            workspace_id="00000000-0000-0000-0000-000000000001",
+            revision_id="00000000-0000-0000-0000-000000000002",
+            canonical_inputs=inputs,
+            request=request,
+        )
+        db.commit()
+        stored = result.summary["implied_multiples"]
+        assert stored["status"] == "available"
+        assert stored["basis"] == "equity_dcf_over_year5_metric"
+        assert stored["value_to_revenue"]["eligible_count"] >= 1
+        assert result.schema_version == "1.4.0"
+    engine.dispose()
+
+
+def test_fcff_simulation_marks_multiples_unavailable() -> None:
+    engine = create_engine("sqlite+pysqlite://")
+    Base.metadata.create_all(engine)
+    inputs = {
+        "monthly_fcff": [100_000.0] * 12,
+        "annual_wacc": 0.2,
+        "terminal_growth": 0.03,
+        "uncertainty": {"kind": "lognormal", "mean": 1.0, "coefficient_of_variation": 0.2},
+        "failure_probability_horizon": 0.1,
+    }
+    request = SimulationRunRequest(seed=471829, simulation_count=1000)
+    with Session(engine) as db:
+        _, result = execute_synchronously(
+            db,
+            workspace_id="00000000-0000-0000-0000-000000000001",
+            revision_id="00000000-0000-0000-0000-000000000002",
+            canonical_inputs=inputs,
+            request=request,
+        )
+        db.commit()
+        stored = result.summary["implied_multiples"]
+        assert stored["status"] == "not_available"
+        assert stored["reason"] == "metrics_unavailable_for_input_mode"
     engine.dispose()

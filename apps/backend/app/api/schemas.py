@@ -371,6 +371,7 @@ class SimulationSummary(ApiModel):
     non_positive_probability: float
     histogram: SimulationHistogram | None = None
     vc_method: dict[str, Any] | None = None
+    implied_multiples: dict[str, Any] | None = None
 
 
 VariableUnit = Literal["currency", "ratio", "multiplier", "binary"]
