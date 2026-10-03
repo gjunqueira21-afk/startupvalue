@@ -101,7 +101,7 @@ Modo é uma preferência de interface, distinto do plano comercial. Transparênc
 
 ## 8. Arquitetura comercial e entitlements propostos
 
-Não há pesquisa de preço ou custo de produção nesta auditoria. Os limites abaixo são decisões iniciais de produto, sujeitos a benchmark de capacidade; não são comparações de mercado. Preços devem permanecer “a definir” em documentação e o checkout desativado até credenciais e política comercial existirem. Não mostrar assinatura ativa fictícia.
+Não há pesquisa de preço ou custo de produção nesta auditoria. Os limites abaixo são decisões iniciais de produto, sujeitos a benchmark de capacidade; não são comparações de mercado. **Decisão comercial de 2026-10-02:** os preços deixaram de ser “a definir” e foram publicados na landing page e em `/pricing` — Grátis (R$ 0), Empresário (R$ 97/mês ou R$ 932/ano), Consultor (R$ 297/mês ou R$ 2.851/ano) e Escritório (R$ 697/mês ou R$ 6.691/ano). O checkout permanece desativado: a captação continua sendo só lista de espera (`POST /api/v1/waitlist`, Task 10/13) até que credenciais de cobrança e política comercial existam. Não mostrar assinatura ativa fictícia.
 
 | Capacidade | Free | Pro | Advisor / VC |
 |---|---|---|---|

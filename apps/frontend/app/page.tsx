@@ -3,6 +3,7 @@ import { ArrowRight, ArrowUpRight, Check } from "@/components/icons";
 import { FuturesFallback } from "@/components/landing/futures-fallback";
 import { buildFuturesSummary } from "@/components/landing/futures-model";
 import { HeroVisual } from "@/components/landing/hero-visual";
+import { PricingCards } from "@/components/landing/pricing-cards";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -22,12 +23,6 @@ const methods = [
   ["01 / DCF", "Fluxo de Caixa Descontado", "Projeta fluxos de caixa livres e os traz a valor presente. Taxa, crescimento terminal e base de valor ficam explícitos."],
   ["02 / VC", "Venture Capital Method", "Conecta valor de saída, retorno-alvo, horizonte, investimento e participação requerida em uma reconciliação auditável."],
   ["03 / MC", "Monte Carlo", "Substitui a falsa precisão de um caso único por milhares de trajetórias condicionadas às premissas informadas."],
-];
-
-const plans = [
-  { name: "Free", eyebrow: "Para começar", description: "Construa uma primeira tese com transparência.", items: ["1 empresa", "1.000 cenários", "DCF e VC Method", "Resumo com marca d'água"] },
-  { name: "Pro", eyebrow: "Para donos de empresa e CFOs", description: "Compare premissas e prepare negociações e captações.", items: ["Até 5 empresas", "Até 10.000 cenários", "Decision Intelligence", "Relatório profissional"], featured: true },
-  { name: "Advisor", eyebrow: "Para escritórios e portfólios", description: "Organize análises de múltiplos clientes e teses.", items: ["Workspaces de clientes", "Até 25.000 cenários", "Comparação completa", "Relatórios por cliente"] },
 ];
 
 export default function HomePage() {
@@ -131,18 +126,14 @@ export default function HomePage() {
         <section className="audience-section">
           <div className="container section-heading"><div><p className="section-index">05 — PARA QUEM</p><h2>Uma linguagem comum para<br /><span>quem constrói e quem investe.</span></h2></div></div>
           <div className="container audience-grid">
-            {[['Donos de empresa', 'Saiba quanto vale o seu negócio e negocie com premissas visíveis.'], ['Investidores', 'Avalie oportunidades, risco e sensibilidade com rastreabilidade.'], ['Contadores & Consultores', 'Estruture análises de valuation para múltiplos clientes.'], ['Compradores & Sócios', 'Avalie aquisições, entradas e saídas de sociedade com hipóteses documentadas.']].map(([title, text], index) => <article key={title}><span>0{index + 1}</span><h3>{title}</h3><p>{text}</p></article>)}
+            {[['Donos de empresa', 'Saiba quanto vale o seu negócio e negocie com premissas visíveis.', null], ['Investidores', 'Avalie oportunidades, risco e sensibilidade com rastreabilidade.', null], ['Contadores & Consultores', 'Entregue laudos de valuation com a sua marca, para múltiplos clientes.', 'white label'], ['Compradores & Sócios', 'Avalie aquisições, entradas e saídas de sociedade com hipóteses documentadas.', null]].map(([title, text, tag], index) => <article key={title}><span>0{index + 1}</span><h3>{title}{tag && <span className="audience-tag">{tag}</span>}</h3><p>{text}</p></article>)}
           </div>
         </section>
 
         <section className="pricing-section section-grid" id="planos">
-          <div className="container section-heading"><div><p className="section-index">06 — PLANOS</p><h2>Comece com clareza.<br /><span>Escale com profundidade.</span></h2></div><p>Valores comerciais serão publicados no lançamento.</p></div>
-          <div className="container pricing-grid">
-            {plans.map((plan) => <article className={plan.featured ? "plan-card featured" : "plan-card"} key={plan.name}>
-              {plan.featured && <div className="plan-badge">MAIS COMPLETO</div>}<p>{plan.eyebrow}</p><h3>{plan.name}</h3><span>{plan.description}</span><strong>Preço a definir</strong><Link className={plan.featured ? "button button-primary" : "button button-secondary"} href="/signup">Entrar na lista <ArrowRight /></Link><ul>{plan.items.map(item => <li key={item}><Check />{item}</li>)}</ul>
-            </article>)}
-          </div>
-          <p className="container pricing-note">Planos e limites são uma arquitetura inicial de produto. Não há checkout ou cobrança ativa nesta fundação.</p>
+          <div className="container section-heading"><div><p className="section-index">06 — PLANOS</p><h2>Comece com clareza.<br /><span>Escale com profundidade.</span></h2></div><p>Planos para cada estágio, do diagnóstico ao portfólio completo.</p></div>
+          <PricingCards source="landing" />
+          <p className="container pricing-note">Cobrança ainda não está ativa. Entre na lista de espera e seja avisado no lançamento — sem cartão, sem compromisso.</p>
         </section>
 
         <section className="faq-section">
@@ -153,6 +144,8 @@ export default function HomePage() {
               <details><summary>Mais simulações tornam a projeção mais precisa?</summary><p>Mais cenários reduzem o erro numérico de Monte Carlo, mas não corrigem premissas econômicas inadequadas. Qualidade dos inputs e transparência do modelo continuam essenciais.</p></details>
               <details><summary>Qual a diferença entre DCF e VC Method?</summary><p>O DCF desconta fluxos futuros e valor terminal. O VC Method parte de um valor de saída e do retorno-alvo do investidor. As bases são exibidas separadamente.</p></details>
               <details><summary>Meus resultados podem ser reproduzidos?</summary><p>Sim. Resultados persistidos identificam inputs, versão do modelo, seed aleatória e número de simulações.</p></details>
+              <details><summary>Posso usar o QuantoVale com meus clientes?</summary><p>Sim. Nos planos Consultor e Escritório o relatório sai com a sua marca — logo, cores e nome da sua firma — mantendo a transparência metodológica.</p></details>
+              <details><summary>Quando a cobrança começa?</summary><p>No lançamento comercial. Hoje você entra na lista de espera e é avisado antes de qualquer cobrança.</p></details>
             </div>
           </div>
         </section>

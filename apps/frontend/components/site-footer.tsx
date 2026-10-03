@@ -13,7 +13,7 @@ export function SiteFooter() {
         <div>
           <h2>Produto</h2>
           <Link href="/#como-funciona">Como funciona</Link>
-          <Link href="/#planos">Planos</Link>
+          <Link href="/pricing">Planos</Link>
           <Link href="/methodology">Metodologia</Link>
         </div>
         <div>

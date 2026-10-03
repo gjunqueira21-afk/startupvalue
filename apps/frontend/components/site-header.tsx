@@ -9,7 +9,7 @@ export function SiteHeader() {
         <nav className="desktop-nav" aria-label="Navegação principal">
           <Link href="/#como-funciona">Como funciona</Link>
           <Link href="/methodology">Metodologia</Link>
-          <Link href="/#planos">Planos</Link>
+          <Link href="/pricing">Planos</Link>
         </nav>
         <div className="header-actions">
           <Link className="text-link header-login" href="/login">Entrar</Link>
