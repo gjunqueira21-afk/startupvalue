@@ -9,6 +9,7 @@ by writing directly to the test database, mirroring what
 
 from __future__ import annotations
 
+import csv
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
@@ -295,6 +296,53 @@ def test_waitlist_csv_export_content_type_and_header(
     lines = response.text.splitlines()
     assert lines[0] == "email,plan_interest,source,created_at"
     assert lines[1].startswith("lead-csv@example.com,consultor,landing,")
+
+
+def test_waitlist_csv_export_neutralizes_formula_injection(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    """A malicious email/source starting with '=' must be prefixed with a
+    leading single quote so Excel/Sheets treats the cell as text instead of
+    evaluating it as a formula (or DDE payload) on open.
+    """
+    client, factory = api
+    admin_session = _signup(client, "admin-csv-injection@example.com")
+    _grant_admin(factory, str(admin_session["user_id"]))
+    with factory() as db:
+        db.add(
+            WaitlistEntry(
+                email="=1+1@x.co",
+                plan_interest="consultor",
+                source='=HYPERLINK("http://evil")',
+            )
+        )
+        db.commit()
+
+    response = _waitlist(client, format="csv")
+    assert response.status_code == 200, response.text
+    lines = response.text.splitlines()
+    assert lines[0] == "email,plan_interest,source,created_at"
+    row = next(csv.reader([lines[1]]))
+    assert row[0] == "'=1+1@x.co"
+    assert row[1] == "consultor"
+    assert row[2] == "'=HYPERLINK(\"http://evil\")"
+
+
+def test_waitlist_csv_export_leaves_normal_entry_unchanged(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    client, factory = api
+    admin_session = _signup(client, "admin-csv-normal@example.com")
+    _grant_admin(factory, str(admin_session["user_id"]))
+    _seed_waitlist(factory, "normal-lead@example.com")
+
+    response = _waitlist(client, format="csv")
+    assert response.status_code == 200, response.text
+    lines = response.text.splitlines()
+    row = next(csv.reader([lines[1]]))
+    assert row[0] == "normal-lead@example.com"
+    assert row[1] == "consultor"
+    assert row[2] == "landing"
 
 
 # --- workspace search by member email ----------------------------------------

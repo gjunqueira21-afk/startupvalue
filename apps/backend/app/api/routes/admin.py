@@ -43,6 +43,26 @@ from app.db.models import (
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
+_FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: str) -> str:
+    """Neutralize CSV/Excel formula and DDE injection in exported cells.
+
+    ``email`` and ``source`` originate from the unauthenticated public
+    waitlist endpoint and are never sanitized for spreadsheet semantics. A
+    value starting with ``=``, ``+``, ``-``, ``@``, a tab, or a carriage
+    return is interpreted as a formula (or DDE payload) by Excel/Sheets when
+    the exported file is opened, which can exfiltrate data via e.g.
+    ``=HYPERLINK(...)``. Prefixing a literal single quote forces the
+    spreadsheet to treat the cell as text while leaving the value itself
+    untouched for any other consumer (plain CSV readers see the leading
+    quote as ordinary data).
+    """
+    if value.startswith(_FORMULA_TRIGGER_CHARS):
+        return "'" + value
+    return value
+
 
 def require_platform_admin(db: Database, actor: Actor) -> User:
     """403 ``admin_only`` unless the current user's platform flag is set.
@@ -155,7 +175,12 @@ def list_waitlist(
         writer.writerow(["email", "plan_interest", "source", "created_at"])
         for entry in entries:
             writer.writerow(
-                [entry.email, entry.plan_interest, entry.source, entry.created_at.isoformat()]
+                [
+                    _csv_safe(entry.email),
+                    _csv_safe(entry.plan_interest),
+                    _csv_safe(entry.source),
+                    _csv_safe(entry.created_at.isoformat()),
+                ]
             )
         return Response(
             content=buffer.getvalue(),
