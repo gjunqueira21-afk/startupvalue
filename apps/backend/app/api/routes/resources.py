@@ -34,10 +34,17 @@ def create_startup(payload: StartupCreate, db: Database, actor: Actor) -> Startu
     _require_editor(actor)
     ent = workspace_entitlements(db, actor.workspace_id)
     if ent.max_startups is not None:
-        existing = db.scalar(
-            select(func.count())
-            .select_from(Startup)
-            .where(Startup.workspace_id == actor.workspace_id)
+        # Only active (non-archived) companies occupy a plan slot.
+        existing = (
+            db.scalar(
+                select(func.count())
+                .select_from(Startup)
+                .where(
+                    Startup.workspace_id == actor.workspace_id,
+                    Startup.archived_at.is_(None),
+                )
+            )
+            or 0
         )
         if existing >= ent.max_startups:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "plan_limit_startups")

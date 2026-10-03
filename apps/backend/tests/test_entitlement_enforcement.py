@@ -7,6 +7,7 @@ fixture pattern established in test_entitlements.py / test_api_decision.py.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from io import BytesIO
 
 import httpx
@@ -19,6 +20,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.entitlements import PlanTier, set_workspace_plan
 from app.db.base import Base, get_db
+from app.db.models import Startup
 from app.main import app
 
 
@@ -258,6 +260,32 @@ def test_empresario_workspace_limits_to_five_startups(
     sixth = _post(client, "/api/v1/startups", {"name": "Co 6"})
     assert sixth.status_code == 403, sixth.text
     assert sixth.json()["detail"] == "plan_limit_startups"
+
+
+def test_archived_startup_frees_a_plan_slot(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    client, factory = api
+    _signup(client, "free-archive@example.com")
+
+    first = _post(client, "/api/v1/startups", {"name": "First Co"})
+    assert first.status_code == 201, first.text
+    blocked = _post(client, "/api/v1/startups", {"name": "Second Co"})
+    assert blocked.status_code == 403, blocked.text
+
+    # No archive route exists yet; archive directly in the database.
+    with factory() as db:
+        startup = db.get(Startup, first.json()["id"])
+        assert startup is not None
+        startup.archived_at = datetime.now(UTC)
+        db.commit()
+
+    second = _post(client, "/api/v1/startups", {"name": "Second Co"})
+    assert second.status_code == 201, second.text
+
+    third = _post(client, "/api/v1/startups", {"name": "Third Co"})
+    assert third.status_code == 403, third.text
+    assert third.json()["detail"] == "plan_limit_startups"
 
 
 # --- target plan section gating ---------------------------------------------
