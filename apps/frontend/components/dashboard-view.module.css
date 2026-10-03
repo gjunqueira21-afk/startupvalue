@@ -34,3 +34,79 @@
 @media (max-width: 760px) {
   .emptyState { padding: 26px 20px; }
 }
+
+/*
+ * One "análises recentes" row. `.table-row` (global, shared with the
+ * table-head grid) keeps its own layout for the clickable link; the border
+ * moves up here so it reflects this wrapper's position in the list instead
+ * of the link's position inside it (which stays constant once the delete
+ * trigger / confirm box / notice become siblings below the link).
+ */
+.rowWrapper {
+  position: relative;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.rowWrapper:last-child {
+  border-bottom: 0;
+}
+
+.rowWrapper :global(.table-row) {
+  border-bottom: 0;
+}
+
+.deleteTrigger {
+  position: absolute;
+  top: 50%;
+  right: 34px;
+  transform: translateY(-50%);
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.rowWrapper:hover .deleteTrigger,
+.rowWrapper:focus-within .deleteTrigger {
+  opacity: 1;
+}
+
+.deleteTrigger:hover,
+.deleteTrigger:focus-visible {
+  border-color: #6e2d36;
+  color: var(--red);
+}
+
+.deleteTrigger:disabled {
+  cursor: not-allowed;
+}
+
+.confirmBox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 15px;
+  border-top: 1px solid #6e2d36;
+  background: #ff6b780d;
+}
+
+.confirmBox p {
+  margin: 0;
+  flex: 1;
+  min-width: 220px;
+  color: var(--secondary);
+  font-size: 12px;
+}
+
+.rowNotice {
+  margin: 0;
+  border-radius: 0;
+}

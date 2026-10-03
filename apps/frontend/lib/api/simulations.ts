@@ -516,3 +516,14 @@ export function getTarget(simulationId: string, value: number, signal?: AbortSig
     method: "GET", signal,
   });
 }
+
+/**
+ * Deletes an analysis and its persisted artifacts (owner/admin only; 403
+ * `action_not_allowed` for an analyst, 404 `simulation_not_found`). The
+ * backend responds 204 with no body, which `apiRequest` resolves to `null`.
+ */
+export function deleteSimulation(simulationId: string, signal?: AbortSignal) {
+  return apiRequest<null>(`/api/v1/simulations/${simulationId}`, {
+    method: "DELETE", signal,
+  });
+}

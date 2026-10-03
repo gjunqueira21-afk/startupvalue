@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DRAFT } from "../../components/wizard/defaults";
-import { createSimulation, getTarget } from "./simulations";
+import { createSimulation, deleteSimulation, getTarget } from "./simulations";
 
 function mockJsonFetch(body: unknown) {
   return vi.fn().mockResolvedValue({
@@ -156,5 +156,42 @@ describe("createSimulation", () => {
     const made = calls(fetchMock);
     expect(made).toContain("POST /api/v1/startups");
     expect(made).toContain("POST /api/v1/startups/new-startup/scenarios");
+  });
+});
+
+describe("deleteSimulation", () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("sends a DELETE request to the simulation endpoint and resolves the 204 empty body as null", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const path = String(url).replace(/^https?:\/\/[^/]+/, "");
+      if (path === "/api/v1/auth/csrf") {
+        return { ok: true, json: async () => ({ csrf_token: "tok" }) };
+      }
+      // A real 204 response has no body — `.json()` throws, which `apiRequest` catches.
+      return {
+        ok: true,
+        status: 204,
+        json: async () => {
+          throw new SyntaxError("Unexpected end of JSON input");
+        },
+      };
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await deleteSimulation("sim_1");
+
+    expect(result).toBeNull();
+    const deleteCall = fetchMock.mock.calls.find(
+      ([, init]) => ((init as RequestInit | undefined)?.method ?? "GET").toUpperCase() === "DELETE",
+    );
+    expect(deleteCall).toBeDefined();
+    const [url, init] = deleteCall as [string, RequestInit];
+    expect(url).toContain("/api/v1/simulations/sim_1");
+    expect(init.method).toBe("DELETE");
   });
 });

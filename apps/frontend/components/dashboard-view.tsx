@@ -7,7 +7,17 @@ import { ArrowRight, BuildingIcon, ChartIcon, FileIcon, GridIcon } from "./icons
 import { getSession, type SessionResponse } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { getDashboard, type DashboardAnalysis, type DashboardResponse } from "@/lib/api/dashboard";
+import { deleteSimulation } from "@/lib/api/simulations";
 import styles from "./dashboard-view.module.css";
+
+interface RowDeleteState {
+  confirming: boolean;
+  busy: boolean;
+  notice: string;
+  noticeIsError: boolean;
+}
+
+const IDLE_ROW_STATE: RowDeleteState = { confirming: false, busy: false, notice: "", noticeIsError: false };
 
 const number = new Intl.NumberFormat("pt-BR");
 
@@ -36,24 +46,124 @@ function initials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "SV";
 }
 
-function RecentAnalysis({ analysis }: { analysis: DashboardAnalysis }) {
+function RecentAnalysis({
+  analysis,
+  deleteState,
+  onRequestDelete,
+  onCancelDelete,
+  onConfirmDelete,
+}: {
+  analysis: DashboardAnalysis;
+  deleteState: RowDeleteState;
+  onRequestDelete: (simulationId: string) => void;
+  onCancelDelete: (simulationId: string) => void;
+  onConfirmDelete: (analysis: DashboardAnalysis) => void;
+}) {
   return (
-    <Link href={`/app/simulations/${analysis.simulation_id}`} className="table-row" role="row">
-      <span className="company-cell">
-        <b>{initials(analysis.startup_name)}</b>
-        <span><strong>{analysis.startup_name}</strong><small>{analysis.scenario_name} · Seed {number.format(analysis.seed)}</small></span>
-      </span>
-      <span><strong>{formatMoney(analysis.p50, analysis.currency)}</strong><small>{analysis.p50 === null ? analysis.status : "Mediana da simulação"}</small></span>
-      <span><strong>{analysis.p25 === null || analysis.p75 === null ? "—" : `${formatMoney(analysis.p25, analysis.currency)} — ${formatMoney(analysis.p75, analysis.currency)}`}</strong><small>P25 — P75</small></span>
-      <span><code>{analysis.model_version}</code></span>
-      <span>{formatDate(analysis.created_at)}</span>
-      <span aria-hidden="true">→</span>
-    </Link>
+    <div className={styles.rowWrapper} role="row">
+      <Link href={`/app/simulations/${analysis.simulation_id}`} className="table-row">
+        <span className="company-cell">
+          <b>{initials(analysis.startup_name)}</b>
+          <span><strong>{analysis.startup_name}</strong><small>{analysis.scenario_name} · Seed {number.format(analysis.seed)}</small></span>
+        </span>
+        <span><strong>{formatMoney(analysis.p50, analysis.currency)}</strong><small>{analysis.p50 === null ? analysis.status : "Mediana da simulação"}</small></span>
+        <span><strong>{analysis.p25 === null || analysis.p75 === null ? "—" : `${formatMoney(analysis.p25, analysis.currency)} — ${formatMoney(analysis.p75, analysis.currency)}`}</strong><small>P25 — P75</small></span>
+        <span><code>{analysis.model_version}</code></span>
+        <span>{formatDate(analysis.created_at)}</span>
+        <span aria-hidden="true">→</span>
+      </Link>
+      {!deleteState.confirming && (
+        <button
+          type="button"
+          className={styles.deleteTrigger}
+          disabled={deleteState.busy}
+          onClick={() => onRequestDelete(analysis.simulation_id)}
+        >
+          Excluir
+        </button>
+      )}
+      {deleteState.confirming && (
+        <div className={styles.confirmBox} role="alertdialog">
+          <p>Excluir esta análise? Essa ação não pode ser desfeita.</p>
+          <button
+            type="button"
+            className="button button-primary button-small"
+            disabled={deleteState.busy}
+            onClick={() => onConfirmDelete(analysis)}
+          >
+            {deleteState.busy ? "Excluindo…" : "Confirmar"}
+          </button>
+          <button
+            type="button"
+            className="button button-secondary button-small"
+            disabled={deleteState.busy}
+            onClick={() => onCancelDelete(analysis.simulation_id)}
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+      {deleteState.notice && (
+        <p
+          className={`form-notice ${deleteState.noticeIsError ? "error" : ""} ${styles.rowNotice}`.trim()}
+          role="status"
+        >
+          {deleteState.notice}
+        </p>
+      )}
+    </div>
   );
 }
 
 function DashboardContent({ session, dashboard }: { session: SessionResponse; dashboard: DashboardResponse }) {
-  const latest = dashboard.recent_analyses[0];
+  const [analyses, setAnalyses] = useState<DashboardAnalysis[]>(dashboard.recent_analyses);
+  const [rowState, setRowState] = useState<Record<string, RowDeleteState>>({});
+
+  useEffect(() => {
+    setAnalyses(dashboard.recent_analyses);
+    setRowState({});
+  }, [dashboard]);
+
+  function patchRow(simulationId: string, patch: Partial<RowDeleteState>) {
+    setRowState((prev) => ({
+      ...prev,
+      [simulationId]: { ...(prev[simulationId] ?? IDLE_ROW_STATE), ...patch },
+    }));
+  }
+
+  function requestDelete(simulationId: string) {
+    patchRow(simulationId, { confirming: true, notice: "" });
+  }
+
+  function cancelDelete(simulationId: string) {
+    patchRow(simulationId, { confirming: false });
+  }
+
+  async function confirmDelete(analysis: DashboardAnalysis) {
+    patchRow(analysis.simulation_id, { busy: true });
+    try {
+      await deleteSimulation(analysis.simulation_id);
+      setAnalyses((prev) => prev.filter((item) => item.simulation_id !== analysis.simulation_id));
+      setRowState((prev) => {
+        const next = { ...prev };
+        delete next[analysis.simulation_id];
+        return next;
+      });
+    } catch (error) {
+      patchRow(analysis.simulation_id, {
+        busy: false,
+        confirming: false,
+        notice: error instanceof ApiError
+          ? (error.status === 403
+            ? "Apenas proprietários ou administradores podem excluir análises."
+            : `Não foi possível excluir a análise. Código HTTP: ${error.status}.`)
+          : "Não foi possível excluir a análise.",
+        noticeIsError: true,
+      });
+    }
+  }
+
+  const latest = analyses[0];
   const dateLabel = new Intl.DateTimeFormat("pt-BR", { dateStyle: "full" }).format(new Date()).toUpperCase();
   return (
     <main id="main-content" className="dashboard-page">
@@ -71,7 +181,7 @@ function DashboardContent({ session, dashboard }: { session: SessionResponse; da
 
       <section className="dashboard-section" id="analises">
         <div className="section-title"><div><p>PORTFÓLIO</p><h2>Análises recentes</h2></div><Link href="/app/companies/new">Nova análise <ArrowRight /></Link></div>
-        {dashboard.recent_analyses.length === 0 ? (
+        {analyses.length === 0 ? (
           <div className={styles.emptyState}>
             <span>PRIMEIRA ANÁLISE</span>
             <h3>Seus resultados aparecerão aqui.</h3>
@@ -81,7 +191,16 @@ function DashboardContent({ session, dashboard }: { session: SessionResponse; da
         ) : (
           <div className="analysis-table" role="table" aria-label="Análises recentes">
             <div className="table-head" role="row"><span>EMPRESA / CENÁRIO</span><span>VALUATION P50</span><span>CORE RANGE</span><span>MODELO</span><span>CRIADA EM</span><span /></div>
-            {dashboard.recent_analyses.map((analysis) => <RecentAnalysis analysis={analysis} key={analysis.simulation_id} />)}
+            {analyses.map((analysis) => (
+              <RecentAnalysis
+                analysis={analysis}
+                key={analysis.simulation_id}
+                deleteState={rowState[analysis.simulation_id] ?? IDLE_ROW_STATE}
+                onRequestDelete={requestDelete}
+                onCancelDelete={cancelDelete}
+                onConfirmDelete={confirmDelete}
+              />
+            ))}
           </div>
         )}
       </section>
@@ -89,9 +208,9 @@ function DashboardContent({ session, dashboard }: { session: SessionResponse; da
       <section className="dashboard-columns">
         <article>
           <div className="section-title compact"><div><p>ATIVIDADE</p><h2>Execuções recentes</h2></div></div>
-          {dashboard.recent_analyses.length === 0 ? <p className={styles.secondary}>Ainda não há execuções neste workspace.</p> : (
+          {analyses.length === 0 ? <p className={styles.secondary}>Ainda não há execuções neste workspace.</p> : (
             <div className="activity-list">
-              {dashboard.recent_analyses.slice(0, 4).map((analysis) => (
+              {analyses.slice(0, 4).map((analysis) => (
                 <div key={analysis.simulation_id}>
                   <i className={analysis.status === "succeeded" ? "success" : ""} />
                   <span><strong>{number.format(analysis.simulation_count)} cenários · {analysis.status === "succeeded" ? "concluídos" : analysis.status}</strong><small>{analysis.startup_name} · {analysis.scenario_name}</small></span>
