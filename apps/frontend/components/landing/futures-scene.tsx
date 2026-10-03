@@ -46,7 +46,10 @@ export type FuturesSceneProps = {
   labels: RefObject<Partial<Record<LabelKey, HTMLElement | null>>>;
   /** false on a return visit this session: the scene mounts already settled */
   playIntro: boolean;
-  onReady: () => void;
+  /** set by the host when the visitor interacted before this scene was built: start settled */
+  interacted: RefObject<boolean>;
+  /** first rendered frame; `playing` = the intro is running (not skipped / settled) */
+  onReady: (playing: boolean) => void;
   /** fires once, when labels/headline may enter; `settled` = the intro was skipped or never played */
   onIntroDone: (settled: boolean) => void;
   onFail: () => void;
@@ -281,7 +284,7 @@ function lineGeometry(values: number[]) {
 }
 
 /* ------------------------------------------------------------------ component */
-export default function FuturesScene({ summary, lite, labels, playIntro, onReady, onIntroDone, onFail }: FuturesSceneProps) {
+export default function FuturesScene({ summary, lite, labels, playIntro, interacted: interactedEarly, onReady, onIntroDone, onFail }: FuturesSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   // read once, when the scene is built: a later prop change must never restart the intro
   const playIntroRef = useRef(playIntro);
@@ -540,7 +543,8 @@ export default function FuturesScene({ summary, lite, labels, playIntro, onReady
     let width = 1;
     let height = 1;
     const pointer = { x: 0, y: 0 };
-    const playing = playIntroRef.current;
+    // an interaction during the chunk download (after playIntro was decided) also starts settled
+    const playing = playIntroRef.current && !interactedEarly.current;
     // act 1 opens close (0.82x) and turned; a return visit starts at the resting composition
     const eased = playing ? { yaw: baseYaw + 0.22, pitch: basePitch + 0.05, dolly: 0.82 } : { yaw: baseYaw, pitch: basePitch, dolly: 1 };
     // drag-to-rotate: a clamped yaw offset the user controls; once they grab the scene,
@@ -616,7 +620,8 @@ export default function FuturesScene({ summary, lite, labels, playIntro, onReady
       pathUniforms.uReveal.value = reveal;
       pathUniforms.uSpread.value = frame.spread;
       pathUniforms.uFall.value = frame.fall;
-      pathUniforms.uTime.value = elapsed;
+      // pulses run on wall time so a skip (elapsed jump) doesn't teleport them
+      pathUniforms.uTime.value = runTime;
       medianMaterials.forEach((material) => (material.uniforms.uReveal.value = Math.max(0, reveal - 0.12)));
       spreadMaterials.forEach((material) => (material.uniforms.uReveal.value = Math.max(0, fanReveal - 0.12)));
       gridMaterial.uniforms.uOpacity.value = 0.34 * easeOutCubic(elapsed / 1.2);
@@ -649,7 +654,7 @@ export default function FuturesScene({ summary, lite, labels, playIntro, onReady
 
       if (!readySent) {
         readySent = true;
-        callbacks.current.onReady();
+        callbacks.current.onReady(elapsed < INTRO_TOTAL);
       }
       if (!introSent && frame.revealUi) {
         introSent = true;
@@ -777,7 +782,7 @@ export default function FuturesScene({ summary, lite, labels, playIntro, onReady
       renderer.forceContextLoss();
       canvas.remove();
     };
-  }, [summary, lite, labels]);
+  }, [summary, lite, labels, interactedEarly]);
 
   return <div ref={hostRef} className="futures-canvas-host" />;
 }

@@ -59,6 +59,11 @@ export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fal
   const [introSettled, setIntroSettled] = useState(false);
   // decided once per scene mount; the scene reads it only when it is built
   const [playIntro, setPlayIntro] = useState(false);
+  // Someone who scrolled/clicked/typed before the scene drew its first frame gets it settled.
+  // These listeners stay alive through the chunk download until the scene reports ready (by
+  // then its own skip listeners are registered); the scene reads the ref when it is built.
+  const interactedRef = useRef(false);
+  const removeEarlyRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -68,31 +73,39 @@ export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fal
     let timeoutHandle = 0;
     let observer: IntersectionObserver | null = null;
 
-    // someone who already scrolled/clicked/typed before the scene mounted gets it settled
-    let interactedEarly = false;
     const earlyOptions: AddEventListenerOptions = { capture: true, passive: true };
-    const removeEarly = () => EARLY_SKIP_EVENTS.forEach((type) => window.removeEventListener(type, onEarly, earlyOptions));
-    function onEarly() {
-      interactedEarly = true;
-      removeEarly();
-    }
-    EARLY_SKIP_EVENTS.forEach((type) => window.addEventListener(type, onEarly, earlyOptions));
+    const removeEarly = () => {
+      removeEarlyRef.current?.();
+      removeEarlyRef.current = null;
+    };
+    const addEarly = () => {
+      if (removeEarlyRef.current || interactedRef.current) return;
+      const onEarly = () => {
+        interactedRef.current = true;
+        removeEarly();
+      };
+      EARLY_SKIP_EVENTS.forEach((type) => window.addEventListener(type, onEarly, earlyOptions));
+      removeEarlyRef.current = () => EARLY_SKIP_EVENTS.forEach((type) => window.removeEventListener(type, onEarly, earlyOptions));
+    };
 
     const start = () => {
-      if (reduced.matches || !hasCapableWebGL()) return;
+      if (reduced.matches || !hasCapableWebGL()) {
+        removeEarly(); // static fallback: nothing will ever play
+        return;
+      }
+      addEarly();
       observer = new IntersectionObserver(
         ([entry]) => {
           if (!entry.isIntersecting) return;
           observer?.disconnect();
           const mount = () => {
-            removeEarly();
             const storage = sessionStore();
-            const play = !interactedEarly && (storage ? shouldPlayIntro(storage) : true);
+            const play = !interactedRef.current && (storage ? shouldPlayIntro(storage) : true);
             setPlayIntro(play);
             setIntroSettled(false);
             setLite(window.matchMedia("(max-width: 760px)").matches || (navigator.hardwareConcurrency || 8) <= 2);
             setMode("loading");
-            if (play) setCopyIntro(stage, "playing");
+            // the headline is hidden only once the scene draws its first playing frame (onReady)
           };
           if ("requestIdleCallback" in window) idleHandle = window.requestIdleCallback(mount, { timeout: 1500 });
           else timeoutHandle = globalThis.setTimeout(mount, 400) as unknown as number;
@@ -125,7 +138,13 @@ export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fal
     };
   }, []);
 
-  const onReady = useCallback(() => setMode("live"), []);
+  const onReady = useCallback((playing: boolean) => {
+    setMode("live");
+    // the scene's own skip listeners are live now: hand off from the early ones
+    removeEarlyRef.current?.();
+    removeEarlyRef.current = null;
+    if (playing) setCopyIntro(stageRef.current, "playing");
+  }, []);
   const onIntroDone = useCallback((settled: boolean) => {
     setIntroSettled(settled);
     setIntroDone(true);
@@ -134,6 +153,8 @@ export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fal
     if (storage) markIntroSeen(storage);
   }, []);
   const onFail = useCallback(() => {
+    removeEarlyRef.current?.();
+    removeEarlyRef.current = null;
     setMode("static");
     setIntroDone(false);
     setCopyIntro(stageRef.current, "done");
@@ -172,7 +193,7 @@ export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fal
 
         {mode !== "static" && (
           <div className={styles.canvasHost}>
-            <FuturesScene summary={summary} lite={lite} labels={labelRefs} playIntro={playIntro} onReady={onReady} onIntroDone={onIntroDone} onFail={onFail} />
+            <FuturesScene summary={summary} lite={lite} labels={labelRefs} playIntro={playIntro} interacted={interactedRef} onReady={onReady} onIntroDone={onIntroDone} onFail={onFail} />
           </div>
         )}
 
