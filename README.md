@@ -1,6 +1,6 @@
-# StartupValue
+# QuantoVale
 
-StartupValue is being built as a valuation decision-intelligence platform for startups. The target product combines deterministic DCF and Venture Capital Method calculations with reproducible Monte Carlo simulation, sensitivity analysis, target valuation analysis and institutional reporting.
+QuantoVale is being built as a valuation decision-intelligence platform for startups. The target product combines deterministic DCF and Venture Capital Method calculations with reproducible Monte Carlo simulation, sensitivity analysis, target valuation analysis and institutional reporting.
 
 This repository is an active foundation, not a production-ready release. The audit and product specifications are complete enough to guide implementation; core modules, authenticated API flows and the first integrated wizard path are now in place. The production gates in the documentation still apply.
 
@@ -16,7 +16,7 @@ infra/scripts/       Compose validation, backup and isolated restore drill
 legacy/              Preserved V2 HTML prototype
 ```
 
-The main architectural references are [ARCHITECTURE](docs/ARCHITECTURE.md), [MODEL_AUDIT](docs/MODEL_AUDIT.md), [METHODOLOGY](docs/METHODOLOGY.md), [SECURITY](docs/SECURITY.md), [BENCHMARK](docs/BENCHMARK.md) and [DEPLOY_VPS](docs/DEPLOY_VPS.md).
+The main architectural references are [ARCHITECTURE](docs/ARCHITECTURE.md), [MODEL_AUDIT](docs/MODEL_AUDIT.md), [METHODOLOGY](docs/METHODOLOGY.md), [SECURITY](docs/SECURITY.md), [BENCHMARK](docs/BENCHMARK.md), [DEPLOY_VPS](docs/DEPLOY_VPS.md) and [DEPLOY_RUNBOOK](docs/DEPLOY_RUNBOOK.md).
 
 ## Current implementation status
 
@@ -157,7 +157,7 @@ The `worker` listens to the `simulation`, `report` and `maintenance` RQ queues. 
 
 ## Production deployment
 
-Follow [DEPLOY_VPS](docs/DEPLOY_VPS.md) for host hardening, DNS, firewall, release, rollback and monitoring. A minimum deployment sequence is:
+Follow [DEPLOY_VPS](docs/DEPLOY_VPS.md) for host hardening, DNS, firewall, release, rollback and monitoring. For a condensed, one-page operator sequence on a Hostinger VPS, parameterized by `DOMAIN`, see [DEPLOY_RUNBOOK](docs/DEPLOY_RUNBOOK.md). A minimum deployment sequence is:
 
 1. Copy `infra/env/production.env.example` to `/opt/startupvalue/secrets/production.env`, set mode `600`, and replace every placeholder.
 2. Set `FRONTEND_IMAGE` and `BACKEND_IMAGE` to CI-produced immutable tags or digests. Never deploy `latest`.
