@@ -31,3 +31,14 @@ export function FileIcon({ className }: IconProps) {
 export function ShieldIcon({ className }: IconProps) {
   return <svg aria-hidden="true" className={className} viewBox="0 0 20 20"><path d="M10 2 17 5v5c0 4-2.8 6.8-7 8-4.2-1.2-7-4-7-8V5zM7 10l2 2 4-5" /></svg>;
 }
+
+export function PaletteIcon({ className }: IconProps) {
+  return (
+    <svg aria-hidden="true" className={className} viewBox="0 0 20 20">
+      <path d="M10 3a7 7 0 1 0 0 14c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.7-.4-1-.2-.3-.4-.6-.4-1 0-.8.7-1.4 1.5-1.4H14a3 3 0 0 0 3-3c0-3.3-3.1-6-7-6z" />
+      <circle cx="6.8" cy="8.6" r=".9" fill="currentColor" stroke="none" />
+      <circle cx="9.4" cy="6.2" r=".9" fill="currentColor" stroke="none" />
+      <circle cx="12.4" cy="7.4" r=".9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
