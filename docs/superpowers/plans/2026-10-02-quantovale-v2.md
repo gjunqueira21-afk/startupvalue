@@ -1024,6 +1024,41 @@ export function markIntroSeen(storage: Pick<Storage, "setItem">): void;         
 - [ ] **Step 3: Write `docs/DEPLOY_RUNBOOK.md`** — a one-page operator sequence distilled from `docs/DEPLOY_VPS.md` §everything, parameterized by `DOMAIN`, with these sections: (1) prerequisites (VPS Hostinger KVM ≥ 8 GB, Docker + Compose v2, registered domain, SSH key-only); (2) DNS A/AAAA → VPS, propagation check; (3) secrets file `/opt/quantovale/secrets/production.env` mode 600 — every `CHANGE_ME` replaced, `DOMAIN=<real>`, note the `$$` htpasswd escaping rule from the gate doc; (4) migration chain reminder: `alembic upgrade head` now runs `c4a1e5b9d201`, `e7f2a9c3b115`, `f3d8b6a1c922`; (5) start order postgres+redis → migrate → app → caddy (exact compose commands copied from README's production block); (6) smoke checklist: HTTPS + headers, `/health`, signup→wizard→simulation→PDF download, `POST /api/v1/waitlist` from the landing, branded PDF on a consultor-plan workspace (`scripts/set_plan.py`); (7) backup drill pointer (`infra/scripts/backup.sh`) and rollback note (expand/contract migrations — all three new migrations are additive, rollback-safe); (8) go-live gate list copied from `DEPLOY_VPS.md` §"Bloquear go-live".
 - [ ] **Step 4: Commit** `git commit -am "docs(deploy): Hostinger runbook parameterized by DOMAIN"`
 
+### Task 18: Platform admin backend (adendo 2026-10-03; executar antes da Task 17)
+
+**Files:**
+- Create: `apps/backend/app/api/routes/admin.py`
+- Create: `apps/backend/alembic/versions/a9c4d2e8f106_add_platform_admin_flag.py` (down_revision = "f3d8b6a1c922")
+- Create: `apps/backend/scripts/set_admin.py`
+- Modify: `apps/backend/app/db/models.py` (`User.is_platform_admin: Mapped[bool]`, default False, server_default false)
+- Modify: `apps/backend/app/api/routes/auth.py` (`/auth/me` response gains `is_platform_admin: bool`)
+- Modify: `apps/backend/app/main.py` (include router)
+- Test: `apps/backend/tests/test_admin_api.py`
+
+**Interfaces:**
+- Consumes: `set_workspace_plan`, `entitlements_for` (Task 6); `record_event`; `WaitlistEntry` (Task 10).
+- Produces, all gated by a dependency that 403s (`admin_only`) unless `user.is_platform_admin`:
+  - `GET /api/v1/admin/overview` → `{users, workspaces_by_plan: {free, empresario, consultor, escritorio}, startups, simulations, simulations_last_7d, reports, waitlist_count}`
+  - `GET /api/v1/admin/waitlist` → JSON list; `?format=csv` → text/csv attachment (email, plan_interest, source, created_at)
+  - `GET /api/v1/admin/workspaces?email=` → workspaces where a member's user email matches (exact, case-insensitive): `{id, plan, created_at, startup_count, member_email}`
+  - `POST /api/v1/admin/workspaces/{workspace_id}/plan` body `{plan}` → calls `set_workspace_plan(actor_id=<admin user id>)`, 200 with new plan; unknown workspace 404; invalid plan 422.
+- `scripts/set_admin.py --email X --grant|--revoke`: sets the flag, records `user.admin_changed` AuditEvent, prints result. No HTTP path grants the flag.
+- NO admin route returns scenario inputs, simulation results, report bytes or branding content (business metadata only).
+
+Steps (TDD): failing tests for — non-admin 403 on all four routes; admin overview counts (seed 2 workspaces with different plans, 1 waitlist row); plan change persists + AuditEvent `workspace.plan_changed` with actor_id; waitlist CSV content-type + header row; `/auth/me` includes the flag. Then implement, full suite + ruff clean, commit `feat(admin): platform admin endpoints, flag and grant script` + trailer.
+
+### Task 19: Admin UI (adendo 2026-10-03; executar antes da Task 17)
+
+**Files:**
+- Create: `apps/frontend/app/app/admin/page.tsx` (+ view component, module css per repo pattern)
+- Create: `apps/frontend/lib/api/admin.ts` + Test: `apps/frontend/lib/api/admin.test.ts`
+- Modify: `apps/frontend/components/app-shell.tsx` (nav "Admin" gated on `/auth/me` `is_platform_admin`, following the Task 12 sessionStorage pattern)
+- Modify: `apps/frontend/lib/api/auth.ts` (surface `is_platform_admin`)
+
+**Interfaces:** consumes Task 18's endpoints verbatim. UI: metric cards (visão geral), waitlist table + "Baixar CSV" (link to `?format=csv`), busca por e-mail → resultado com select de plano + confirmação ("Alterar plano de {email} para {plano}?") → POST + feedback. pt-BR. Errors via the house `Código HTTP` convention; 403 → página mostra aviso neutro (não deveria acontecer pois o link é gated).
+
+Steps (TDD on the client): failing vitest for admin.ts mapping (overview parse, workspaces query encoding, plan POST payload, CSV URL builder) → implement → green; page + nav; `npm test` + `lint` + `build` green; commit `feat(admin): business admin panel` + trailer.
+
 ### Task 17: Final verification sweep
 
 **Files:** none new.

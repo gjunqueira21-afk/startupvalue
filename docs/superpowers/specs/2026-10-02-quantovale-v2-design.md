@@ -164,6 +164,26 @@ headline (texto não espera o canvas).
   e checklist de segurança pré-go-live derivado de `DEPLOY_VPS.md`.
 - Go-live real depende do domínio (ainda não registrado) e de acesso SSH do operador.
 
+## 6b. Admin de plataforma (adendo aprovado em 2026-10-03)
+
+O dono do negócio precisa administrar assinantes sem SSH. Escopo aprovado:
+
+- Flag `is_platform_admin` em `User` (concedida apenas por script de operador,
+  auditada; nunca por request). Exposta em `/auth/me`.
+- Endpoints `/api/v1/admin/*`, todos exigindo a flag (403 caso contrário):
+  visão geral (contagens de usuários, workspaces por plano, empresas,
+  simulações, relatórios, lista de espera), lista de espera com export CSV,
+  busca de workspace por e-mail de membro, e troca de plano auditada
+  (reusa `set_workspace_plan`).
+- Página `/app/admin` visível apenas para o admin: métricas, tabela/export da
+  lista de espera, busca e troca de plano com confirmação.
+- Restrição mantida do PRODUCT_SPEC §10: admin NÃO lê projeções financeiras,
+  cenários ou PDFs de assinantes; nenhuma rota admin expõe esses dados.
+
+Critérios de aceite adicionais: (8) rota admin com usuário comum → 403 em
+todas; (9) troca de plano via admin persiste e gera AuditEvent; (10) export
+CSV da waitlist baixa com content-type text/csv.
+
 ## 7. Fora de escopo desta fase
 
 Checkout/billing (fase 2 — Mercado Pago ou Stripe), multiusuário por workspace,
