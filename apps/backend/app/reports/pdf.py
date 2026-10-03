@@ -251,7 +251,7 @@ def _cover(
             name_label = branding.firm_name
         else:
             _brand_mark(canvas, left, top, mark_size, accent)
-            name_label = "STARTUPVALUE"
+            name_label = "QUANTOVALE"
         badge = "CONFIDENCIAL"
         badge_w = canvas.stringWidth(badge, "Helvetica-Bold", 7.5) + 11 * 1 + 5 * mm
         # Brand text runs from the logo slot to just short of the badge;
@@ -271,7 +271,7 @@ def _cover(
         tagline = (
             branding.footer_text
             if branding is not None and branding.footer_text
-            else "Valuation probabilístico de startups"
+            else "Valuation probabilístico para empresas"
         )
         # ``tagline`` always falls back to a non-empty default above, so it is
         # unconditionally drawn.
@@ -455,7 +455,7 @@ def _page_chrome(
         header_budget = (right - canvas.stringWidth(context, "Helvetica", 6.8) - 4 * mm) - left
         brand_label = _clip(
             canvas,
-            branding.firm_name if branding is not None else "STARTUPVALUE",
+            branding.firm_name if branding is not None else "QUANTOVALE",
             "Helvetica-Bold",
             6.8,
             min(60 * mm, header_budget),

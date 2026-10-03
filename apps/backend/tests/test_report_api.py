@@ -310,7 +310,7 @@ def test_free_workspace_with_branding_row_still_gets_unbranded_watermarked_pdf(
         page.extract_text() or "" for page in PdfReader(BytesIO(response.content)).pages
     )
     assert "Alfa Consultoria" not in text
-    assert "STARTUPVALUE" in text
+    assert "QUANTOVALE" in text
     assert "RESUMO GRATUITO" in text
 
 

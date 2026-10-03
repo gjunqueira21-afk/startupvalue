@@ -331,7 +331,7 @@ def test_unbranded_report_still_shows_product_name() -> None:
 
     reader = PdfReader(BytesIO(pdf_bytes))
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
-    assert "STARTUPVALUE" in text
+    assert "QUANTOVALE" in text
 
 
 def test_watermark_renders_and_changes_output_size() -> None:
