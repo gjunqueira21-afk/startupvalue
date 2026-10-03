@@ -44,6 +44,28 @@ export interface DriverRankingSummary {
   items: RankedDriverSummary[];
 }
 
+/** A single value-to-metric multiple distribution (Task 2 payload shape). */
+export interface MultipleSummary {
+  p25: number;
+  p50: number;
+  p75: number;
+  eligible_count: number;
+  excluded_count: number;
+}
+
+/**
+ * Multiples implied by the user's own assumptions (valuation / year-5 metric
+ * across simulated scenarios) — NOT market multiples. Stripped for free-plan
+ * workspaces, so it may be absent even when the simulation has a summary.
+ */
+export interface ImpliedMultiples {
+  status: "available" | "not_available";
+  reason: string | null;
+  basis: string;
+  value_to_revenue: MultipleSummary | null;
+  value_to_ebitda: MultipleSummary | null;
+}
+
 export interface SimulationSummary {
   basis: string;
   percentiles: Record<"p5" | "p10" | "p25" | "p50" | "p75" | "p90" | "p95", number>;
@@ -60,6 +82,7 @@ export interface SimulationSummary {
   breakeven_month_percentiles: Record<string, number>;
   non_positive_probability: number;
   histogram?: { edges: number[]; counts: number[] };
+  implied_multiples?: ImpliedMultiples | null;
 }
 
 export interface Driver extends RankedDriverSummary {
@@ -122,6 +145,28 @@ export interface ConditionInsight {
   miss_value: number;
   cliffs_delta: number;
   threshold: number | null;
+}
+
+/** One point of the reference revenue trajectory built from the required CAGR (Task 4 payload shape). */
+export interface YearTarget {
+  year: number;
+  revenue: number;
+}
+
+/**
+ * Reverse-engineered plan for reaching a valuation target: the required
+ * revenue CAGR and EBITDA margin among scenarios that hit it, contrasted
+ * with scenarios that miss it (Task 4 payload shape, `TargetResponse.plan`).
+ * Null when the workspace is not entitled to this section.
+ */
+export interface TargetPlan {
+  status: "available" | "insufficient_hits" | "not_available_for_inputs";
+  hit_count: number;
+  required_revenue_cagr: number | null;
+  hit_ebitda_margin: number | null;
+  miss_revenue_cagr: number | null;
+  miss_ebitda_margin: number | null;
+  trajectory: YearTarget[];
 }
 
 export interface TargetInsight {

@@ -2,8 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import { compactMoney, formatByUnit, percent } from "@/lib/format";
-import { histogramTicks } from "@/lib/results";
-import type { InsightResponse, SimulationResponse, SimulationSummary, TargetInsight } from "@/lib/api/simulations";
+import { histogramTicks, targetPlanView } from "@/lib/results";
+import type { InsightResponse, SimulationResponse, SimulationSummary, TargetInsight, TargetPlan } from "@/lib/api/simulations";
 import styles from "./results.module.css";
 
 const integer = new Intl.NumberFormat("pt-BR");
@@ -21,8 +21,55 @@ function effectLabel(delta: number, kind: "continuous" | "binary"): string {
   return "desprezível";
 }
 
+/**
+ * "Plano para a meta": what the hitting scenarios need to look like, derived from
+ * already-simulated samples (no re-simulation). Renders nothing when the plan is
+ * absent — free-plan workspaces or a `null` response — so the card degrades silently.
+ */
+function TargetPlanSection({ plan }: { plan: TargetPlan | null | undefined }) {
+  const view = targetPlanView(plan);
+  if (view.kind === "hidden") return null;
+  return (
+    <div className={styles.plan} aria-labelledby="target-plan-title">
+      <p className={styles.eyebrow} id="target-plan-title">Plano para a meta</p>
+      {(view.kind === "insufficient" || view.kind === "unavailable") && (
+        <p className={styles.sentence} style={{ marginBottom: 0 }}>{view.sentence}</p>
+      )}
+      {view.kind === "available" && (
+        <>
+          <dl className={styles.facts}>
+            <dt>CAGR de receita necessário</dt>
+            <dd>{view.requiredCagr}</dd>
+            {view.hitMargin !== null && (
+              <>
+                <dt>Margem EBITDA alvo (ano 5)</dt>
+                <dd>{view.hitMargin}</dd>
+              </>
+            )}
+          </dl>
+          {view.trajectory.length > 0 && (
+            <div className={styles.tableScroll}><table className={styles.dataTable}>
+              <caption className={styles.muted} style={{ textAlign: "left", fontSize: 12 }}>
+                Trajetória de receita de referência implícita no CAGR necessário
+              </caption>
+              <thead><tr><th>Ano</th><th>Receita de referência</th></tr></thead>
+              <tbody>
+                {view.trajectory.map((row) => (
+                  <tr key={row.year}><td>{row.year}</td><td>{row.revenue}</td></tr>
+                ))}
+              </tbody>
+            </table></div>
+          )}
+          <p className={styles.note}>{view.contrast}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function TargetCard({
   target,
+  plan,
   initialValue,
   busy,
   error,
@@ -30,6 +77,7 @@ export function TargetCard({
   onAnalyze,
 }: {
   target: TargetInsight | null;
+  plan?: TargetPlan | null;
   initialValue: number | null;
   busy: boolean;
   error: string;
@@ -109,6 +157,7 @@ export function TargetCard({
               </table></div>
             )}
             <p className={styles.note}>{target.disclaimer} Alterar a meta consulta os cenários já salvos; não roda uma nova simulação.</p>
+            <TargetPlanSection plan={plan} />
           </>
         ) : (
           <p className={styles.sentence}>Informe um valuation-alvo para ver a probabilidade de atingi-lo e o que os cenários bem-sucedidos têm em comum.</p>

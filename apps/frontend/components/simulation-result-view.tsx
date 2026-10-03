@@ -16,7 +16,7 @@ import { suggestedTarget } from "@/lib/results";
 import { AppShell } from "./app-shell";
 import { DistributionCard, MethodsCard, TargetCard } from "./results/analysis-sections";
 import { DriversCard, RisksCard, TailsCard, TornadoCard } from "./results/driver-sections";
-import { InsightSection, KpiRow } from "./results/summary-sections";
+import { InsightSection, KpiRow, MultiplesCard } from "./results/summary-sections";
 import styles from "./results/results.module.css";
 
 const integer = new Intl.NumberFormat("pt-BR");
@@ -102,6 +102,7 @@ function ResultContent({ simulation }: { simulation: SimulationResponse }) {
           {summary ? (
             <>
               <KpiRow summary={summary} target={insight?.target ?? null} currency={currency} />
+              <MultiplesCard multiples={summary.implied_multiples} />
               {insight ? (
                 <InsightSection insight={insight} summary={summary} currency={currency} />
               ) : (

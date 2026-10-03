@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { divergingBar, histogramTicks, suggestedTarget, tornadoRows, uncertaintyPosition } from "./results";
+import {
+  divergingBar,
+  formatMultiple,
+  formatPercentBR,
+  histogramTicks,
+  multiplesRows,
+  suggestedTarget,
+  targetPlanView,
+  tornadoRows,
+  uncertaintyPosition,
+} from "./results";
+import type { ImpliedMultiples, TargetPlan } from "./api/simulations";
 
 describe("suggestedTarget", () => {
   it("rounds P75 up to a clean two-significant-digit figure", () => {
@@ -65,5 +76,131 @@ describe("uncertaintyPosition", () => {
     expect(uncertaintyPosition(1.5)).toBeCloseTo(75);
     expect(uncertaintyPosition(3.6)).toBe(100);
     expect(uncertaintyPosition(null)).toBe(100);
+  });
+});
+
+describe("formatMultiple", () => {
+  it("formats with one decimal and a pt-BR comma", () => {
+    expect(formatMultiple(8.44)).toBe("8,4x");
+    expect(formatMultiple(2)).toBe("2,0x");
+    expect(formatMultiple(10.96)).toBe("11,0x");
+  });
+});
+
+describe("formatPercentBR", () => {
+  it("formats a ratio with one decimal and a pt-BR comma", () => {
+    expect(formatPercentBR(0.3)).toBe("30,0%");
+    expect(formatPercentBR(0.0825)).toBe("8,3%");
+    expect(formatPercentBR(0)).toBe("0,0%");
+  });
+});
+
+describe("multiplesRows", () => {
+  const fixture: ImpliedMultiples = {
+    status: "available",
+    reason: null,
+    basis: "equity_dcf_over_year5_metric",
+    value_to_revenue: { p25: 3.1, p50: 4.2, p75: 5.9, eligible_count: 420, excluded_count: 80 },
+    value_to_ebitda: { p25: 7.5, p50: 8.44, p75: 10.2, eligible_count: 300, excluded_count: 200 },
+  };
+
+  it("maps both available multiples to formatted rows with an eligibility note", () => {
+    const rows = multiplesRows(fixture);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual({
+      label: "Valor / Receita",
+      p25: "3,1x",
+      p50: "4,2x",
+      p75: "5,9x",
+      note: "420 de 500 cenários elegíveis",
+    });
+    expect(rows[1]).toEqual({
+      label: "Valor / EBITDA",
+      p25: "7,5x",
+      p50: "8,4x",
+      p75: "10,2x",
+      note: "300 de 500 cenários elegíveis",
+    });
+  });
+
+  it("omits a metric that is absent even when the other is available", () => {
+    const rows = multiplesRows({ ...fixture, value_to_ebitda: null });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].label).toBe("Valor / Receita");
+  });
+
+  it("returns an empty array when multiples are absent, not available, or undefined", () => {
+    expect(multiplesRows(undefined)).toEqual([]);
+    expect(multiplesRows(null)).toEqual([]);
+    expect(multiplesRows({ status: "not_available", reason: "metrics_unavailable_for_input_mode", basis: "equity_dcf_over_year5_metric", value_to_revenue: null, value_to_ebitda: null })).toEqual([]);
+  });
+});
+
+describe("targetPlanView", () => {
+  it("is hidden when the plan is absent (free plan or not entitled)", () => {
+    expect(targetPlanView(null)).toEqual({ kind: "hidden" });
+    expect(targetPlanView(undefined)).toEqual({ kind: "hidden" });
+  });
+
+  it("explains the shortfall against the minimum hit sample when insufficient", () => {
+    const plan: TargetPlan = {
+      status: "insufficient_hits",
+      hit_count: 12,
+      required_revenue_cagr: null,
+      hit_ebitda_margin: null,
+      miss_revenue_cagr: null,
+      miss_ebitda_margin: null,
+      trajectory: [],
+    };
+    const view = targetPlanView(plan);
+    expect(view.kind).toBe("insufficient");
+    if (view.kind === "insufficient") {
+      expect(view.sentence).toContain("12");
+      expect(view.sentence).toContain("50");
+    }
+  });
+
+  it("is a neutral unavailable note when the inputs do not support a plan", () => {
+    const plan: TargetPlan = {
+      status: "not_available_for_inputs",
+      hit_count: 0,
+      required_revenue_cagr: null,
+      hit_ebitda_margin: null,
+      miss_revenue_cagr: null,
+      miss_ebitda_margin: null,
+      trajectory: [],
+    };
+    const view = targetPlanView(plan);
+    expect(view.kind).toBe("unavailable");
+    if (view.kind === "unavailable") expect(view.sentence.length).toBeGreaterThan(0);
+  });
+
+  it("formats the required CAGR, target margin, trajectory, and hit-vs-miss contrast when available", () => {
+    const plan: TargetPlan = {
+      status: "available",
+      hit_count: 120,
+      required_revenue_cagr: 0.35,
+      hit_ebitda_margin: 0.18,
+      miss_revenue_cagr: 0.12,
+      miss_ebitda_margin: 0.05,
+      trajectory: [
+        { year: 1, revenue: 1_000_000 },
+        { year: 2, revenue: 1_350_000 },
+      ],
+    };
+    const view = targetPlanView(plan);
+    expect(view.kind).toBe("available");
+    if (view.kind === "available") {
+      expect(view.requiredCagr).toBe("35,0%");
+      expect(view.hitMargin).toBe("18,0%");
+      expect(view.missCagr).toBe("12,0%");
+      expect(view.missMargin).toBe("5,0%");
+      expect(view.trajectory).toEqual([
+        { year: 1, revenue: "R$ 1,0 mi" },
+        { year: 2, revenue: "R$ 1,4 mi" },
+      ]);
+      expect(view.contrast).toContain("35,0%");
+      expect(view.contrast).toContain("12,0%");
+    }
   });
 });

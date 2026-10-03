@@ -579,6 +579,13 @@
   font-size: 13px;
 }
 
+/* Plano para a meta */
+.plan {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line-soft);
+}
+
 /* Distribution */
 .histogram {
   position: relative;

@@ -1,6 +1,6 @@
 import { compactMoney, percent } from "@/lib/format";
-import { uncertaintyPosition } from "@/lib/results";
-import type { InsightResponse, SimulationSummary, TargetInsight, UncertaintyLabel } from "@/lib/api/simulations";
+import { multiplesRows, uncertaintyPosition } from "@/lib/results";
+import type { ImpliedMultiples, InsightResponse, SimulationSummary, TargetInsight, UncertaintyLabel } from "@/lib/api/simulations";
 import styles from "./results.module.css";
 
 const LEVELS: { key: UncertaintyLabel; label: string; share: number }[] = [
@@ -53,6 +53,39 @@ export function KpiRow({ summary, target, currency }: { summary: SimulationSumma
         <span className={styles.kpiNote}>{target ? <a href="#meta">Ver o que precisa acontecer</a> : "Defina uma meta abaixo."}</span>
       </article>
     </section>
+  );
+}
+
+/**
+ * Valuation ÷ year-5 revenue/EBITDA across the simulated scenarios. Renders nothing
+ * when the section is absent — e.g. stripped for free-plan workspaces, or the engine
+ * could not derive enough eligible scenarios — so the page degrades silently.
+ */
+export function MultiplesCard({ multiples }: { multiples: ImpliedMultiples | null | undefined }) {
+  const rows = multiplesRows(multiples);
+  if (rows.length === 0) return null;
+  return (
+    <article className={styles.card} aria-labelledby="multiples-title">
+      <p className={styles.eyebrow}>Múltiplos implícitos</p>
+      <h2 className={styles.cardTitle} id="multiples-title">O que o valuation implica em múltiplos</h2>
+      <div className={styles.tableScroll}><table className={styles.dataTable}>
+        <caption className={styles.muted} style={{ textAlign: "left", fontSize: 12 }}>
+          Múltiplos implícitos nas suas premissas — não são múltiplos de mercado.
+        </caption>
+        <thead><tr><th>Múltiplo</th><th>P25</th><th>P50</th><th>P75</th></tr></thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <td>{row.label}</td>
+              <td>{row.p25}</td>
+              <td>{row.p50}</td>
+              <td>{row.p75}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+      <p className={styles.note}>{rows.map((row) => `${row.label}: ${row.note}.`).join(" ")}</p>
+    </article>
   );
 }
 
