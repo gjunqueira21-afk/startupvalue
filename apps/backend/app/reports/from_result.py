@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypeGuard
 
 from app.db.models import Scenario, ScenarioRevision, Simulation, SimulationResult, Startup
 from app.decision.catalog import describe
@@ -13,10 +13,32 @@ from app.insights.engine import InsightReport
 from app.insights.formatting import effect_label
 from app.services.simulation import with_uncertainty
 
+from .narrative import format_money, format_percent
 from .schema import ReportData
 
 REPORT_TEMPLATE_VERSION = "1.3.0"
 BASIS_LABELS = {"DCF equity value (signed)": "Equity via DCF · inclui valores negativos"}
+
+TERMINAL_METRIC_LABELS = {"revenue": "Receita", "ebitda": "EBITDA"}
+
+DEFAULT_VC_NOTE = "O Venture Capital Method não foi calculado nem persistido nesta simulação."
+
+VC_REASON_NOTES = {
+    "revenue_projection_missing": (
+        "Informe a projeção de receita de 5 anos no perfil da empresa para habilitar "
+        "esta análise."
+    ),
+    "revenue_projection_invalid": (
+        "Informe a projeção de receita de 5 anos no perfil da empresa para habilitar "
+        "esta análise."
+    ),
+    "vc_assumptions_invalid": (
+        "Informe o múltiplo de saída e o retorno-alvo anual no perfil da empresa."
+    ),
+    "round_assumptions_invalid": (
+        "Informe o aporte (investimento) e a participação-alvo no perfil da empresa."
+    ),
+}
 
 
 def _profile_text(profile: dict[str, Any], key: str, limit: int) -> str | None:
@@ -161,6 +183,175 @@ def _report_unit(unit: str | None, currency: str) -> str | None:
     )
 
 
+def _multiple(value: float) -> str:
+    return f"{value:.1f}x".replace(".", ",")
+
+
+def _is_number(value: Any) -> TypeGuard[float]:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _dcf_analysis(inputs: dict[str, Any], summary: dict[str, Any], currency: str) -> dict[str, Any]:
+    """Summarize the deterministic DCF inputs that the Monte Carlo distribution propagates.
+
+    No new valuation happens here: every metric is read verbatim from the persisted
+    scenario revision and simulation summary.
+    """
+    metrics: list[dict[str, str]] = []
+
+    wacc = inputs.get("annual_wacc")
+    if _is_number(wacc):
+        metrics.append({"name": "WACC anual", "value": format_percent(float(wacc))})
+
+    terminal_method = inputs.get("terminal_method", "gordon")
+    exit_multiple = inputs.get("exit_multiple")
+    terminal_growth = inputs.get("terminal_growth")
+    if terminal_method == "exit_multiple" and _is_number(exit_multiple):
+        exit_metric = inputs.get("exit_metric")
+        label = TERMINAL_METRIC_LABELS.get(exit_metric, "") if isinstance(exit_metric, str) else ""
+        suffix = f" ({label})" if label else ""
+        metrics.append(
+            {"name": f"Múltiplo de saída{suffix}", "value": _multiple(float(exit_multiple))}
+        )
+    elif _is_number(terminal_growth):
+        metrics.append(
+            {"name": "Crescimento terminal", "value": format_percent(float(terminal_growth))}
+        )
+
+    metrics.append({"name": "Horizonte", "value": "60 meses (5 anos)"})
+
+    excess_cash = inputs.get("excess_cash")
+    if _is_number(excess_cash):
+        metrics.append(
+            {"name": "Caixa excedente", "value": format_money(float(excess_cash), currency)}
+        )
+    debt = inputs.get("debt")
+    if _is_number(debt):
+        metrics.append({"name": "Dívida", "value": format_money(float(debt), currency)})
+
+    p50 = summary.get("percentiles", {}).get("p50")
+    if _is_number(p50):
+        metrics.append(
+            {"name": "Equity mediano (P50)", "value": format_money(float(p50), currency)}
+        )
+
+    return {
+        "status": "available",
+        "metrics": metrics,
+        "note": (
+            "A distribuição Monte Carlo da seção seguinte é este DCF propagado pelos "
+            "cenários simulados; este card resume as premissas determinísticas (WACC, "
+            "valor terminal, caixa excedente e dívida) que alimentam esse fluxo."
+        ),
+    }
+
+
+def _vc_policy_note(vc_method: dict[str, Any], currency: str) -> str:
+    current_cash = vc_method.get("current_cash_not_applied_to_exit")
+    current_debt = vc_method.get("current_debt_not_applied_to_exit")
+    cash_text = format_money(float(current_cash), currency) if _is_number(current_cash) else "N/D"
+    debt_text = format_money(float(current_debt), currency) if _is_number(current_debt) else "N/D"
+    return (
+        "Convenção: caixa e dívida na saída são tratados como zero nesta versão, por não "
+        "haver projeção de balanço no horizonte de saída. Os saldos atuais informados "
+        f"(caixa {cash_text}, dívida {debt_text}) são apenas informativos e não são "
+        "aplicados ao cálculo do exit."
+    )
+
+
+def _vc_analysis(vc_method: Any, currency: str) -> dict[str, Any]:
+    if not isinstance(vc_method, dict):
+        return {"status": "not_available", "note": DEFAULT_VC_NOTE}
+
+    status = vc_method.get("status")
+    if status not in ("available", "infeasible"):
+        reason_code = vc_method.get("reason_code")
+        reason = vc_method.get("reason")
+        note = VC_REASON_NOTES.get(reason_code) if isinstance(reason_code, str) else None
+        if note is None:
+            note = (
+                f"O Venture Capital Method não pôde ser calculado ({reason})."
+                if isinstance(reason, str) and reason
+                else DEFAULT_VC_NOTE
+            )
+        return {"status": "not_available", "note": note}
+
+    metrics: list[dict[str, str]] = []
+
+    annual_exit_revenue = vc_method.get("annual_exit_revenue")
+    if _is_number(annual_exit_revenue):
+        metrics.append(
+            {
+                "name": "Receita anual de saída (ano 5)",
+                "value": format_money(float(annual_exit_revenue), currency),
+            }
+        )
+    exit_multiple = vc_method.get("exit_multiple")
+    if _is_number(exit_multiple):
+        metrics.append(
+            {"name": "Múltiplo de saída (EV/Receita)", "value": _multiple(float(exit_multiple))}
+        )
+    exit_enterprise_value = vc_method.get("exit_enterprise_value")
+    if _is_number(exit_enterprise_value):
+        metrics.append(
+            {"name": "EV na saída", "value": format_money(float(exit_enterprise_value), currency)}
+        )
+    exit_equity_value = vc_method.get("exit_equity_value")
+    if _is_number(exit_equity_value):
+        metrics.append(
+            {"name": "Equity na saída", "value": format_money(float(exit_equity_value), currency)}
+        )
+    present_exit_equity = vc_method.get("present_exit_equity")
+    if _is_number(present_exit_equity):
+        metrics.append(
+            {
+                "name": "Valor presente do equity de saída",
+                "value": format_money(float(present_exit_equity), currency),
+            }
+        )
+    target_return_annual = vc_method.get("target_return_annual")
+    if _is_number(target_return_annual):
+        metrics.append(
+            {"name": "Retorno-alvo anual", "value": format_percent(float(target_return_annual))}
+        )
+    investment = vc_method.get("investment")
+    if _is_number(investment) and investment > 0:
+        metrics.append(
+            {"name": "Investimento", "value": format_money(float(investment), currency)}
+        )
+    post_money = vc_method.get("post_money")
+    if _is_number(post_money):
+        metrics.append({"name": "Post-money", "value": format_money(float(post_money), currency)})
+    pre_money = vc_method.get("pre_money")
+    if _is_number(pre_money):
+        metrics.append({"name": "Pre-money", "value": format_money(float(pre_money), currency)})
+    required_ownership = vc_method.get("required_ownership_today")
+    if _is_number(required_ownership):
+        metrics.append(
+            {
+                "name": "Participação requerida hoje",
+                "value": format_percent(float(required_ownership)),
+            }
+        )
+    target_ownership = vc_method.get("target_ownership")
+    if _is_number(target_ownership):
+        metrics.append(
+            {"name": "Participação-alvo", "value": format_percent(float(target_ownership))}
+        )
+
+    policy_note = _vc_policy_note(vc_method, currency)
+    if status == "infeasible":
+        note = (
+            "Rodada infeasível: o investimento excede o valor presente do equity de saída "
+            "para o retorno-alvo informado, de modo que nenhuma participação pré-money "
+            f"não negativa atinge esse retorno. {policy_note}"
+        )
+    else:
+        note = policy_note
+
+    return {"status": "available", "metrics": metrics, "note": note[:1000]}
+
+
 def report_from_result(
     *,
     simulation: Simulation,
@@ -215,17 +406,8 @@ def report_from_result(
             "histogram": summary.get("histogram"),
         },
         "assumptions": _assumptions(revision.canonical_inputs, startup.currency),
-        "dcf": {
-            "status": "not_available",
-            "note": (
-                "A distribuição usa fluxos de caixa descontados. Um demonstrativo DCF "
-                "isolado não foi persistido nesta simulação."
-            ),
-        },
-        "venture_capital": {
-            "status": "not_available",
-            "note": "O Venture Capital Method não foi calculado nem persistido nesta simulação.",
-        },
+        "dcf": _dcf_analysis(revision.canonical_inputs, summary, startup.currency),
+        "venture_capital": _vc_analysis(summary.get("vc_method"), startup.currency),
         "drivers": [
             {
                 "name": describe(driver["name"]).label,

@@ -152,7 +152,11 @@ def test_report_download_uses_persisted_result_and_audit_metadata(
     assert "471829" in text
     assert "Árvore Analytics" in text
     assert "Base Case" in text
-    assert "Venture Capital Method não foi calculado" in text
+    # No startup profile revenue projection was supplied, so the VC card stays
+    # honest with an actionable reason instead of a blanket "not calculated".
+    assert "Informe a projeção de receita de 5 anos" in text
+    assert "WACC anual" in text
+    assert "Equity mediano" in text
     assert "Fluxo de caixa vs. plano" in text
     assert "scenario_factor_mean" not in text
     label = str(saved["summary"]["uncertainty_label"])  # type: ignore[index]
