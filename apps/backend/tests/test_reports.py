@@ -286,10 +286,21 @@ def test_branded_report_renders_firm_name_and_logo_and_hides_quantovale() -> Non
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
     assert "Alfa Consultoria" in text
     # The product mark/name is replaced everywhere except audit identifiers
-    # and disclaimers, which must always render.
+    # and disclaimers, which must always render. This includes chart-caption
+    # "Fonte: ..." source attributions (pdf_theme.SOURCE), not just the
+    # cover/chrome brand mark.
     assert "STARTUPVALUE" not in text
+    assert "QuantoVale" not in text
     assert "sim-471829-alpha" in text  # audit identifier: always present
     assert "não são garantia de valor" in text  # disclaimer: always present
+    # PDF document metadata (title/author/creator) must not expose the vendor
+    # on a white-label report either.
+    assert reader.metadata is not None
+    assert reader.metadata.author == "Alfa Consultoria"
+    assert "Alfa Consultoria" in (reader.metadata.title or "")
+    assert "QuantoVale" not in (reader.metadata.title or "")
+    assert "QuantoVale" not in (reader.metadata.author or "")
+    assert "QuantoVale" not in (reader.metadata.creator or "")
 
 
 def test_branded_report_with_corrupt_logo_bytes_still_renders() -> None:
@@ -306,6 +317,11 @@ def test_branded_report_with_corrupt_logo_bytes_still_renders() -> None:
     reader = PdfReader(BytesIO(pdf_bytes))
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
     assert "Beta Capital" in text
+    assert "STARTUPVALUE" not in text
+    assert "QuantoVale" not in text
+    assert reader.metadata is not None
+    assert reader.metadata.author == "Beta Capital"
+    assert "QuantoVale" not in (reader.metadata.title or "")
 
 
 def test_unbranded_report_still_shows_product_name() -> None:

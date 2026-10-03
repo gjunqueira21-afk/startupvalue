@@ -60,6 +60,7 @@ from .pdf_theme import (
     PAGE_MARGIN_TOP,
     PAGE_MARGIN_X,
     PALE,
+    SOURCE,
     WHITE,
     WIDTH,
     Numbering,
@@ -123,6 +124,18 @@ def _date(data: ReportData) -> str:
 
 def _short_id(data: ReportData) -> str:
     return data.audit.simulation_id[:12]
+
+
+def _source_label(branding: ReportBrandingData | None) -> str:
+    """Vendor-free computational-source label for figure captions when branded.
+
+    Unbranded reports keep the full ``SOURCE`` constant ("QuantoVale
+    SimulationResult"); a white-label report never mentions the vendor, and
+    does not substitute the consultant's firm name either — the firm is not
+    the computational source, so a neutral "SimulationResult" is used
+    instead of mislabeling it.
+    """
+    return SOURCE if branding is None else "SimulationResult"
 
 
 def _clip(canvas: Canvas, value: str, font: str, size: float, width: float) -> str:
@@ -244,8 +257,9 @@ def _cover(
             if branding is not None and branding.footer_text
             else "Valuation probabilístico de startups"
         )
-        if branding is None or tagline:
-            canvas.drawString(left + 12.5 * mm, top + 0.4 * mm, tagline)
+        # ``tagline`` always falls back to a non-empty default above, so it is
+        # unconditionally drawn.
+        canvas.drawString(left + 12.5 * mm, top + 0.4 * mm, tagline)
         badge = "CONFIDENCIAL"
         canvas.setFont("Helvetica-Bold", 7.5)
         badge_w = canvas.stringWidth(badge, "Helvetica-Bold", 7.5) + 11 * 1 + 5 * mm
@@ -425,8 +439,9 @@ def _page_chrome(
             if branding is not None and branding.footer_text
             else "Valuation & Monte Carlo Analysis"
         )
-        if branding is None or chrome_tagline:
-            canvas.drawString(left + brand_w + 2 * mm, header_y, chrome_tagline)
+        # ``chrome_tagline`` always falls back to a non-empty default above,
+        # so it is unconditionally drawn.
+        canvas.drawString(left + brand_w + 2 * mm, header_y, chrome_tagline)
         context = f"{data.company.scenario_name} · Data-base {_date(data)}"
         canvas.drawRightString(
             right, header_y, _clip(canvas, context, "Helvetica", 6.8, 90 * mm)
@@ -459,6 +474,14 @@ def _document(
     branding: ReportBrandingData | None = None,
     watermark: bool = False,
 ) -> BaseDocTemplate:
+    if branding is not None:
+        title = f"{branding.firm_name} - {data.company.name}"
+        author = branding.firm_name
+        creator = "Valuation report"
+    else:
+        title = f"QuantoVale - {data.company.name}"
+        author = "QuantoVale"
+        creator = f"QuantoVale report template {data.audit.report_template_version}"
     document = BaseDocTemplate(
         buffer,
         pagesize=A4,
@@ -466,10 +489,10 @@ def _document(
         rightMargin=PAGE_MARGIN_X,
         topMargin=PAGE_MARGIN_TOP,
         bottomMargin=PAGE_MARGIN_BOTTOM,
-        title=f"QuantoVale - {data.company.name}",
-        author="QuantoVale",
+        title=title,
+        author=author,
         subject="Valuation & Monte Carlo Analysis",
-        creator=f"QuantoVale report template {data.audit.report_template_version}",
+        creator=creator,
     )
     frame = Frame(
         document.leftMargin,
@@ -645,7 +668,10 @@ def _method_section(
 
 
 def _distribution(
-    data: ReportData, styles: dict[str, ParagraphStyle], numbering: Numbering
+    data: ReportData,
+    styles: dict[str, ParagraphStyle],
+    numbering: Numbering,
+    source_label: str,
 ) -> list[Any]:
     currency = data.company.currency
     p = data.valuation.percentiles
@@ -664,6 +690,7 @@ def _distribution(
             f"{len(histogram.counts)} faixas",
             styles,
             note=note,
+            source_label=source_label,
         )
         story.append(KeepTogether(chart))
     else:
@@ -744,11 +771,14 @@ def _distribution(
 
 
 def _drivers(
-    data: ReportData, styles: dict[str, ParagraphStyle], numbering: Numbering
+    data: ReportData,
+    styles: dict[str, ParagraphStyle],
+    numbering: Numbering,
+    source_label: str,
 ) -> list[Any]:
     story = _header(numbering, "Drivers do valuation", "Valuation Drivers")
     if data.insight is not None:
-        story.extend(driver_blocks(data, styles, numbering))
+        story.extend(driver_blocks(data, styles, numbering, source_label))
     elif data.drivers:
         story.append(
             KeepTogether(
@@ -758,6 +788,7 @@ def _drivers(
                     "Associação de cada fator com o valuation (Spearman, -1 a +1)",
                     f"{_short_id(data)} · {format_integer(data.audit.simulation_count)} cenários",
                     styles,
+                    source_label=source_label,
                 )
             )
         )
@@ -1090,12 +1121,15 @@ def _target_plan_section(
 
 
 def _risk(
-    data: ReportData, styles: dict[str, ParagraphStyle], numbering: Numbering
+    data: ReportData,
+    styles: dict[str, ParagraphStyle],
+    numbering: Numbering,
+    source_label: str,
 ) -> list[Any]:
     story = _header(numbering, "Risco e sensibilidade", "Risk & Sensitivity")
     sections: tuple[tuple[str, tuple[str, ...]], ...]
     if data.insight is not None:
-        story.extend(sensitivity_blocks(data, styles, numbering))
+        story.extend(sensitivity_blocks(data, styles, numbering, source_label))
         story.append(gap(GAP_S))
         sections = (("Alertas", data.risks.warnings), ("Limitações", data.risks.limitations))
     else:
@@ -1172,10 +1206,13 @@ def _methodology(
     ]
 
 
-def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[Any]:
+def _build_story(
+    data: ReportData, styles: dict[str, ParagraphStyle], branding: ReportBrandingData | None = None
+) -> list[Any]:
     numbering = Numbering()
     methods_grouped = data.dcf.status != "available" and data.venture_capital.status != "available"
     long_assumptions = len(data.assumptions) > ASSUMPTIONS_INLINE
+    source_label = _source_label(branding)
 
     story: list[Any] = [
         NextPageTemplate("report"),
@@ -1183,7 +1220,7 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
         *_header(numbering, "Sumário executivo", "Executive Summary"),
     ]
     if data.insight is not None:
-        story.extend(executive_summary_blocks(data, styles))
+        story.extend(executive_summary_blocks(data, styles, source_label))
     else:
         story.extend(_legacy_summary(data, styles))
 
@@ -1233,7 +1270,7 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
             ]
         )
 
-    story.extend([PageBreak(), *_distribution(data, styles, numbering)])
+    story.extend([PageBreak(), *_distribution(data, styles, numbering, source_label)])
     if not methods_grouped:
         story.append(gap(GAP_L))
         story.extend(_method_section("DCF Analysis", "Método DCF", data.dcf, styles, numbering))
@@ -1246,7 +1283,7 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
                 numbering,
             )
         )
-    story.extend([PageBreak(), *_drivers(data, styles, numbering)])
+    story.extend([PageBreak(), *_drivers(data, styles, numbering, source_label)])
     story.extend([PageBreak(), *_target(data, styles, numbering)])
     multiples_story = _implied_multiples(data, styles, numbering)
     if multiples_story:
@@ -1254,7 +1291,7 @@ def _build_story(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[An
     plan_story = _target_plan_section(data, styles, numbering)
     if plan_story:
         story.extend([PageBreak(), *plan_story])
-    story.extend([PageBreak(), *_risk(data, styles, numbering)])
+    story.extend([PageBreak(), *_risk(data, styles, numbering, source_label)])
     story.extend([PageBreak(), *_methodology(data, styles, numbering)])
     if long_assumptions:
         story.extend(
@@ -1292,7 +1329,7 @@ def _render(
     styles = _styles()
     buffer = BytesIO()
     document = _document(buffer, data, styles, total, branding, watermark)
-    document.build(_build_story(data, styles), canvasmaker=_NumberedCanvas)
+    document.build(_build_story(data, styles, branding), canvasmaker=_NumberedCanvas)
     return buffer.getvalue(), int(document.page)
 
 

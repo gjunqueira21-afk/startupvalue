@@ -207,8 +207,14 @@ def figure(
     source: str,
     styles: dict[str, ParagraphStyle],
     note: str | None = None,
+    source_label: str = SOURCE,
 ) -> list[Any]:
     """Chart, numbered caption and source.
+
+    ``source_label`` is the computational-source prefix ("Fonte: <label> ·
+    ..."). Callers pass a neutral, vendor-free label (e.g. ``"SimulationResult"``)
+    when rendering a white-label report; it defaults to the full branded
+    ``SOURCE`` constant otherwise.
 
     Returned flat: wrap it in exactly one KeepTogether at the call site, because
     ReportLab forces a page break when one KeepTogether is nested in another.
@@ -219,7 +225,7 @@ def figure(
     ]
     if note:
         parts.append(Paragraph(text(note), styles["caption"]))
-    parts.append(Paragraph(f"Fonte: {SOURCE} · {text(source)}", styles["caption"]))
+    parts.append(Paragraph(f"Fonte: {source_label} · {text(source)}", styles["caption"]))
     return parts
 
 

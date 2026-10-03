@@ -83,8 +83,15 @@ def _range_value(low: str, high: str) -> str:
     return f"{low} – {high}"
 
 
-def executive_summary_blocks(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[Any]:
-    """Hero valuation with range bar, KPI strip, top drivers and the executive text."""
+def executive_summary_blocks(
+    data: ReportData, styles: dict[str, ParagraphStyle], source_label: str
+) -> list[Any]:
+    """Hero valuation with range bar, KPI strip, top drivers and the executive text.
+
+    ``source_label`` is the vendor-free or branded computational-source label
+    (see ``pdf_theme.figure``); callers choose it based on whether the report
+    is white-labeled.
+    """
     insight = data.insight
     assert insight is not None
     currency = data.company.currency
@@ -173,7 +180,7 @@ def executive_summary_blocks(data: ReportData, styles: dict[str, ParagraphStyle]
         gap(GAP_XS),
         Paragraph(
             "Faixa simulada de P10 a P90 · barra verde: faixa central P25–P75 · traço: "
-            f"mediana (P50) · Fonte: QuantoVale SimulationResult · "
+            f"mediana (P50) · Fonte: {source_label} · "
             f"{escape(data.audit.simulation_id[:12])}",
             styles["caption"],
         ),
@@ -229,7 +236,10 @@ def executive_summary_blocks(data: ReportData, styles: dict[str, ParagraphStyle]
 
 
 def driver_blocks(
-    data: ReportData, styles: dict[str, ParagraphStyle], numbering: Numbering
+    data: ReportData,
+    styles: dict[str, ParagraphStyle],
+    numbering: Numbering,
+    source_label: str,
 ) -> list[Any]:
     insight = data.insight
     assert insight is not None
@@ -249,6 +259,7 @@ def driver_blocks(
                 "Azul: associação positiva; vermelho: negativa. Participação: parcela da "
                 "variância explicada (SRRC ao quadrado, normalizado)."
             ),
+            source_label=source_label,
         )
         story.append(KeepTogether(chart))
         story.append(gap(GAP_M))
@@ -322,7 +333,10 @@ def target_blocks(data: ReportData, styles: dict[str, ParagraphStyle]) -> list[A
 
 
 def sensitivity_blocks(
-    data: ReportData, styles: dict[str, ParagraphStyle], numbering: Numbering
+    data: ReportData,
+    styles: dict[str, ParagraphStyle],
+    numbering: Numbering,
+    source_label: str,
 ) -> list[Any]:
     insight = data.insight
     assert insight is not None
@@ -377,6 +391,7 @@ def sensitivity_blocks(
                         f"{compact_money(tornado.base_value, currency, short=True)}",
                         styles,
                         note=note,
+                        source_label=source_label,
                     ),
                     gap(GAP_S),
                     table,

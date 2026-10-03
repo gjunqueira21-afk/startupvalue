@@ -333,7 +333,14 @@ def test_consultor_workspace_with_branding_gets_branded_pdf_and_audit_event(
     )
     assert "Alfa Consultoria" in text
     assert "STARTUPVALUE" not in text
+    assert "QuantoVale" not in text
     assert "RESUMO GRATUITO" not in text
+    reader = PdfReader(BytesIO(response.content))
+    assert reader.metadata is not None
+    assert reader.metadata.author == "Alfa Consultoria"
+    assert "QuantoVale" not in (reader.metadata.title or "")
+    assert "QuantoVale" not in (reader.metadata.author or "")
+    assert "QuantoVale" not in (reader.metadata.creator or "")
 
     with factory() as db:
         from app.db.models import AuditEvent
