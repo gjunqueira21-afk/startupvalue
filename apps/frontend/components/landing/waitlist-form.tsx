@@ -16,11 +16,11 @@ export type WaitlistSubmitResult = { ok: true } | { ok: false; message: string }
  * DOM — this repo has no React Testing Library and vitest runs in the
  * default "node" environment. See `waitlist-form.test.tsx`.
  *
- * Posts same-origin via a relative path with a plain `fetch` (no
- * `credentials: "include"`, no CSRF preflight): the backend's CSRF guard
- * (`app/auth/csrf.py`) only demands a token when a session cookie is present,
- * and a waitlist visitor never has one, so the `apiRequest` client's
- * cookie-mutation flow would do unneeded work for no benefit here.
+ * Posts same-origin via a relative path with `credentials: "omit"` and no
+ * CSRF preflight. The backend's CSRF guard (`app/auth/csrf.py`) demands an
+ * X-CSRF-Token whenever a session cookie is present — and a same-origin fetch
+ * sends cookies by default, so a LOGGED-IN visitor would get a 403. Omitting
+ * credentials keeps the request anonymous (the endpoint needs no session).
  */
 export async function submitWaitlist(
   fetchImpl: typeof fetch,
@@ -29,6 +29,8 @@ export async function submitWaitlist(
   try {
     const response = await fetchImpl("/api/v1/waitlist", {
       method: "POST",
+      // Never send the session cookie: with it, csrf_guard 403s a logged-in visitor.
+      credentials: "omit",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: params.email,

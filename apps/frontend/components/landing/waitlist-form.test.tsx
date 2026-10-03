@@ -30,6 +30,8 @@ describe("submitWaitlist", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/v1/waitlist");
     expect(init.method).toBe("POST");
+    // A session cookie would trip the backend CSRF guard for logged-in visitors.
+    expect(init.credentials).toBe("omit");
     expect(JSON.parse(init.body as string)).toEqual({
       email: "dono@empresa.com.br",
       plan_interest: "consultor",

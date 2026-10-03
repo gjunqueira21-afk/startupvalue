@@ -127,6 +127,32 @@ def test_endpoint_works_without_auth_cookie(
     assert response.status_code == 201, response.text
 
 
+def test_session_cookie_without_csrf_token_is_rejected_so_the_form_omits_credentials(
+    api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    """Documents why the landing waitlist fetch uses ``credentials: "omit"``.
+
+    The CSRF guard demands a token whenever a session cookie rides along, so a
+    logged-in visitor's cookie-carrying POST is refused; the same POST without
+    the cookie (what the browser sends with credentials omitted) succeeds.
+    """
+    client, _ = api
+    signup = client.post(
+        "/api/v1/auth/signup",
+        json={"name": "Founder", "email": "member@example.com", "password": "strong-password-123"},
+    )
+    assert signup.status_code == 201, signup.text
+    assert client.cookies, "signup must set a session cookie"
+
+    with_cookie = _join(client, "logged-in@example.com")
+    assert with_cookie.status_code == 403, with_cookie.text
+    assert with_cookie.json()["detail"] == "invalid_csrf_token"
+
+    client.cookies.clear()
+    without_cookie = _join(client, "logged-in@example.com")
+    assert without_cookie.status_code == 201, without_cookie.text
+
+
 # --- fix-report regression coverage -----------------------------------------
 
 
