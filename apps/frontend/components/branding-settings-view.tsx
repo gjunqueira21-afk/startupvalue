@@ -22,6 +22,23 @@ const ACTIVE = "/app/settings/branding";
 // 403 for either case degrades here, never a crash.
 type Access = "loading" | "form" | "plan" | "role" | "error";
 
+/**
+ * Pulls the backend's error code out of an `ApiError`'s `details` — FastAPI's
+ * default `HTTPException` body is `{ "detail": "<code>" }`. Used to tell the
+ * two possible 403s on `getBranding()` apart: `white_label_not_in_plan`
+ * (plan — show the upsell) from anything else, notably `action_not_allowed`
+ * (role lacks owner/admin — show the role notice).
+ */
+function errorCode(error: unknown): string | null {
+  if (!(error instanceof ApiError)) return null;
+  const details = error.details;
+  if (details && typeof details === "object" && "detail" in details) {
+    const detail = (details as { detail?: unknown }).detail;
+    if (typeof detail === "string") return detail;
+  }
+  return null;
+}
+
 function AccessNotice({ variant }: { variant: "plan" | "role" | "error" }) {
   const copy = {
     plan: {
@@ -86,9 +103,15 @@ export function BrandingSettingsView() {
       .catch((error: unknown) => {
         if (!mounted) return;
         if (error instanceof DOMException && error.name === "AbortError") return;
-        // A 403 here only happens from the nested getBranding call (role
-        // lacks owner/admin) — getEntitlements never 403s on its own.
-        setAccess(error instanceof ApiError && error.status === 403 ? "role" : "error");
+        // A 403 here only happens from the nested getBranding call —
+        // getEntitlements never 403s on its own. It can still be
+        // `white_label_not_in_plan` (the plan was downgraded between the two
+        // fetches), so the code decides the notice, not just the status.
+        if (error instanceof ApiError && error.status === 403) {
+          setAccess(errorCode(error) === "white_label_not_in_plan" ? "plan" : "role");
+          return;
+        }
+        setAccess("error");
       });
 
     return () => {
