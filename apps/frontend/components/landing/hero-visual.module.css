@@ -211,9 +211,15 @@
   opacity: 1;
 }
 
-/* the failure label only lands after the plunge (act 2 of the intro) */
+/* the failure label only lands after the plunge (act 3 of the intro: labels enter at 5.0 s,
+   the plunge runs 5.0–6.4 s, failure dots/cubes land ~5.4–6.4 s) */
 .labelsIn .liveLabels .labelFailure {
-  transition-delay: 1.5s;
+  transition-delay: 1.2s;
+}
+
+/* skipped intro or return visit: everything is already settled, no staging */
+.labelsNow.labelsIn .liveLabels .labelFailure {
+  transition-delay: 0s;
 }
 
 /* ---------------------------------------------------------------- caption */

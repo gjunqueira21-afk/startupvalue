@@ -38,13 +38,17 @@ import {
   type FuturesSummary,
   type LabelKey,
 } from "./futures-model";
+import { INTRO_TOTAL, introFrame } from "./intro-timeline";
 
 export type FuturesSceneProps = {
   summary: FuturesSummary;
   lite: boolean;
   labels: RefObject<Partial<Record<LabelKey, HTMLElement | null>>>;
+  /** false on a return visit this session: the scene mounts already settled */
+  playIntro: boolean;
   onReady: () => void;
-  onIntroDone: () => void;
+  /** fires once, when labels/headline may enter; `settled` = the intro was skipped or never played */
+  onIntroDone: (settled: boolean) => void;
   onFail: () => void;
 };
 
@@ -52,10 +56,11 @@ const GREEN = new Color("#35e6a1");
 const BLUE = new Color("#5ca7ff");
 const RED = new Color("#ff6b78");
 
-// The intro plays in two acts: the sweep draws every trajectory left-to-right until the
-// valuation histogram forms, then the failing futures turn red and plunge to the floor.
-const SWEEP_SECONDS = 3.6;
-const FALL_SECONDS = 1.4;
+// The intro plays in three acts (timing lives in ./intro-timeline): act 1 draws every
+// trajectory collapsed onto the median (one number), act 2 spreads them into the fan while
+// the histogram forms, act 3 turns the failing futures red and plunges them to the floor.
+// Any interaction skips straight to the settled state.
+const SKIP_EVENTS = ["pointerdown", "wheel", "keydown", "touchstart", "scroll"] as const;
 
 const ARIA_LABEL =
   "Visualização 3D ilustrativa: milhares de trajetórias simuladas de valuation partem de hoje e se abrem em leque ao longo de cinco anos, formando um histograma de 100 cubos, cada um representando 100 cenários. A mediana, a faixa P25–P75 e os percentis P10 e P90 estão destacados; trajetórias em vermelho despencam até o chão ao terminar em falência. Arraste horizontalmente para girar a visualização.";
@@ -63,7 +68,9 @@ const ARIA_LABEL =
 /* ------------------------------------------------------------------ shaders */
 const PATH_VERT = /* glsl */ `
   attribute vec3 aData; // t (0..1 along the horizon; drop progress on plunges), seed, kind (0..1 failure weight, 2 = plunge)
+  attribute float aMid; // median (P50) height at this vertex's step
   uniform float uReveal;
+  uniform float uSpread; // 0 = every path collapsed onto the median line, 1 = the full fan
   uniform float uFall;
   uniform float uTime;
   uniform vec3 uGreen;
@@ -79,10 +86,12 @@ const PATH_VERT = /* glsl */ `
     float kind = aData.z;
     float isFall = step(1.5, kind);
     float w = mix(min(kind, 1.0), 1.0, isFall);
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    // the offset from the median line (height and depth) scales with the spread
+    vec3 p = vec3(position.x, mix(aMid, position.y, uSpread), position.z * uSpread);
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
 
-    // act 1: trajectories sweep left-to-right; act 2: plunge segments are revealed top-down
+    // acts 1-2: trajectories sweep left-to-right; act 3: plunge segments are revealed top-down
     float head = uReveal * 1.3 - seed * 0.3;
     float fallHead = uFall * 1.5 - seed * 0.35;
     float shown = mix(clamp((head - t) * 16.0, 0.0, 1.0), clamp((fallHead - t) * 6.0, 0.0, 1.0), isFall);
@@ -96,7 +105,7 @@ const PATH_VERT = /* glsl */ `
     vec3 color = mix(uBlue, uGreen, smoothstep(0.0, 0.42, t));
     // thousands of paths share the origin: keep it from saturating
     float alpha = mix(0.045, 0.085, fract(seed * 3.7)) * (0.06 + 0.94 * smoothstep(0.0, 0.34, t)) * uBoost;
-    // failing futures look like any other during the sweep; they blush red as act 2 begins
+    // failing futures look like any other during the sweep; they blush red as the fall (act 3) begins
     float redW = w * mix(clamp(uFall * 3.0, 0.0, 1.0), 1.0, isFall);
     color = mix(color, uRed, redW);
     alpha = mix(alpha, 0.22, redW);
@@ -123,7 +132,9 @@ const COLOR_FRAG = /* glsl */ `
 
 const POINT_VERT = /* glsl */ `
   attribute vec3 aData; // t at which the point appears, seed, kind
+  attribute float aMid; // where the point sits while the fan is collapsed
   uniform float uReveal;
+  uniform float uSpread;
   uniform float uFall;
   uniform float uPixelRatio;
   uniform float uSize;
@@ -131,7 +142,8 @@ const POINT_VERT = /* glsl */ `
   uniform vec3 uRed;
   varying vec4 vColor;
   void main() {
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vec3 p = vec3(position.x, mix(aMid, position.y, uSpread), position.z * uSpread);
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
     float isFail = step(0.5, aData.z);
     // survivor dots land with the sweep; failure dots only once their plunge touches the floor
@@ -218,11 +230,8 @@ const GRID_FRAG = /* glsl */ `
 `;
 
 /* ------------------------------------------------------------------ helpers */
+// (easeInOut now lives only in ./intro-timeline, which owns all act timing)
 const easeOutCubic = (x: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
-const easeInOut = (x: number) => {
-  const v = Math.min(1, Math.max(0, x));
-  return v < 0.5 ? 4 * v * v * v : 1 - Math.pow(-2 * v + 2, 3) / 2;
-};
 
 function flatMaterial(color: string, opacity: number, dash = 0, additive = false) {
   return new ShaderMaterial({
@@ -272,8 +281,10 @@ function lineGeometry(values: number[]) {
 }
 
 /* ------------------------------------------------------------------ component */
-export default function FuturesScene({ summary, lite, labels, onReady, onIntroDone, onFail }: FuturesSceneProps) {
+export default function FuturesScene({ summary, lite, labels, playIntro, onReady, onIntroDone, onFail }: FuturesSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  // read once, when the scene is built: a later prop change must never restart the intro
+  const playIntroRef = useRef(playIntro);
   const callbacks = useRef({ onReady, onIntroDone, onFail });
   callbacks.current = { onReady, onIntroDone, onFail };
 
@@ -326,10 +337,15 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     }
     const positions = new Float32Array(segmentCount * 2 * 3);
     const attrs = new Float32Array(segmentCount * 2 * 3);
+    const mids = new Float32Array(segmentCount * 2);
     const endPositions: number[] = [];
     const endData: number[] = [];
+    const endMids: number[] = [];
+    // collapse target for act 1: the P50 line (z = 0), the same curve the median ribbon draws
+    const medianY = summary.bands.p50.map(worldY);
     let v = 0;
-    const push = (x: number, y: number, z: number, t: number, seed: number, kind: number) => {
+    const push = (x: number, y: number, z: number, t: number, seed: number, kind: number, mid: number) => {
+      mids[v] = mid;
       positions[v * 3] = x;
       positions[v * 3 + 1] = y;
       positions[v * 3 + 2] = z;
@@ -347,8 +363,8 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
       // two-month resolution: calmer curves and half the vertices
       for (let s = 0; s < last; ) {
         const n = Math.min(last, s + 2);
-        push(worldX(s), worldY(data.logV[base + s]), data.z[base + s], s / STEPS, seeds[i], weight(s));
-        push(worldX(n), worldY(data.logV[base + n]), data.z[base + n], n / STEPS, seeds[i], weight(n));
+        push(worldX(s), worldY(data.logV[base + s]), data.z[base + s], s / STEPS, seeds[i], weight(s), medianY[s]);
+        push(worldX(n), worldY(data.logV[base + n]), data.z[base + n], n / STEPS, seeds[i], weight(n), medianY[n]);
         s = n;
       }
       if (fail >= 0) {
@@ -363,23 +379,28 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
           const f = k / 4;
           const nx = x + f * 0.17;
           const ny = y + (WORLD.floor - y) * f * f;
-          push(px, py, z, (k - 1) / 4, seeds[i], 2);
-          push(nx, ny, z, f, seeds[i], 2);
+          // plunges only show in act 3, once the fan is fully spread: they need no collapse target
+          push(px, py, z, (k - 1) / 4, seeds[i], 2, py);
+          push(nx, ny, z, f, seeds[i], 2, ny);
           px = nx;
           py = ny;
         }
         endPositions.push(px, WORLD.floor, z);
         endData.push(1, seeds[i], 1);
+        endMids.push(WORLD.floor);
       } else {
         endPositions.push(worldX(STEPS), worldY(data.logV[base + STEPS]), data.z[base + STEPS]);
         endData.push(1, seeds[i], 0);
+        endMids.push(medianY[STEPS]);
       }
     }
     const pathGeometry = track(new BufferGeometry());
     pathGeometry.setAttribute("position", new BufferAttribute(positions, 3));
     pathGeometry.setAttribute("aData", new BufferAttribute(attrs, 3));
+    pathGeometry.setAttribute("aMid", new BufferAttribute(mids, 1));
     const pathUniforms = {
       uReveal: { value: 0 },
+      uSpread: { value: 0 },
       uFall: { value: 0 },
       uTime: { value: 0 },
       uGreen: { value: GREEN },
@@ -397,7 +418,8 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     const endGeometry = track(new BufferGeometry());
     endGeometry.setAttribute("position", new BufferAttribute(new Float32Array(endPositions), 3));
     endGeometry.setAttribute("aData", new BufferAttribute(new Float32Array(endData), 3));
-    const pointUniforms = { uReveal: pathUniforms.uReveal, uFall: pathUniforms.uFall, uPixelRatio: { value: dpr }, uSize: { value: lite ? 2.4 : 2.1 }, uGreen: { value: GREEN }, uRed: { value: RED } };
+    endGeometry.setAttribute("aMid", new BufferAttribute(new Float32Array(endMids), 1));
+    const pointUniforms = { uReveal: pathUniforms.uReveal, uSpread: pathUniforms.uSpread, uFall: pathUniforms.uFall, uPixelRatio: { value: dpr }, uSize: { value: lite ? 2.4 : 2.1 }, uGreen: { value: GREEN }, uRed: { value: RED } };
     const endMaterial = track(
       new ShaderMaterial({ vertexShader: POINT_VERT, fragmentShader: POINT_FRAG, uniforms: pointUniforms, transparent: true, depthWrite: false, blending: AdditiveBlending }),
     );
@@ -423,7 +445,9 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     const tailMaterial = track(flatMaterial("#c3ccd6", 0.55, 34));
     scene.add(new Line(track(lineGeometry(bands.p10)), tailMaterial));
     scene.add(new Line(track(lineGeometry(bands.p90)), tailMaterial));
-    const flatMaterials = [bandMaterial, medianGlowMaterial, medianMaterial, tailMaterial];
+    // the median is drawn in act 1 (the single number); band and tails arrive with the fan
+    const medianMaterials = [medianGlowMaterial, medianMaterial];
+    const spreadMaterials = [bandMaterial, tailMaterial];
 
     /* ---------------- floor grid + year-5 measuring frame */
     const gridPositions: number[] = [];
@@ -473,7 +497,7 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     }
     const failStagger = 0.4 / Math.max(1, summary.failureCubes - 1 || 1);
     for (let k = 0; k < summary.failureCubes; k += 1) {
-      // failure cubes belong to act 2: they stack (0.3..0.7 of the fall) as futures hit the floor
+      // failure cubes belong to act 3: they stack (0.3..0.7 of the fall) as futures hit the floor
       cubes.push({ slot: new Vector3(...failureCubeSlot(k)), start: 0.3 + k * failStagger, color: cubeColor.failure, fall: true });
     }
     const cubeMesh = new InstancedMesh(cubeGeometry, cubeMaterial, cubes.length);
@@ -516,7 +540,9 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     let width = 1;
     let height = 1;
     const pointer = { x: 0, y: 0 };
-    const eased = { yaw: baseYaw + 0.22, pitch: basePitch + 0.05, dolly: 1.12 };
+    const playing = playIntroRef.current;
+    // act 1 opens close (0.82x) and turned; a return visit starts at the resting composition
+    const eased = playing ? { yaw: baseYaw + 0.22, pitch: basePitch + 0.05, dolly: 0.82 } : { yaw: baseYaw, pitch: basePitch, dolly: 1 };
     // drag-to-rotate: a clamped yaw offset the user controls; once they grab the scene,
     // the hover parallax bows out so the chosen angle sticks
     const dragState = { active: false, id: -1, x0: 0, base: 0 };
@@ -563,7 +589,10 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     };
 
     /* ---------------- loop, pause & adaptive quality */
-    let elapsed = 0;
+    // elapsed = intro clock (starts settled on a return visit); runTime = time since mount
+    let elapsed = playing ? 0 : INTRO_TOTAL;
+    let runTime = 0;
+    let snapCamera = false;
     let last = performance.now();
     let raf = 0;
     let inView = true;
@@ -576,25 +605,35 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       elapsed += dt;
+      runTime += dt;
 
-      const reveal = Math.min(1.35, easeOutCubic(elapsed / SWEEP_SECONDS) * 1.35);
-      const fall = easeInOut((elapsed - SWEEP_SECONDS) / FALL_SECONDS);
+      const frame = introFrame(elapsed);
+      // act 1 draws the collapsed bundle along the median (reveal 0 -> 1); act 2 finishes the
+      // seed-staggered heads (1 -> 1.35, the old maximum) while uSpread opens the fan
+      const reveal = frame.prelude + 0.35 * frame.spread;
+      // today's sweep curve (1.35 * easeOutCubic), replayed over act 2 for what belongs to the fan
+      const fanReveal = 1.35 * frame.spread;
       pathUniforms.uReveal.value = reveal;
-      pathUniforms.uFall.value = fall;
+      pathUniforms.uSpread.value = frame.spread;
+      pathUniforms.uFall.value = frame.fall;
       pathUniforms.uTime.value = elapsed;
-      flatMaterials.forEach((material) => (material.uniforms.uReveal.value = Math.max(0, reveal - 0.12)));
+      medianMaterials.forEach((material) => (material.uniforms.uReveal.value = Math.max(0, reveal - 0.12)));
+      spreadMaterials.forEach((material) => (material.uniforms.uReveal.value = Math.max(0, fanReveal - 0.12)));
       gridMaterial.uniforms.uOpacity.value = 0.34 * easeOutCubic(elapsed / 1.2);
       glowUniforms.uOpacity.value = easeOutCubic(elapsed / 0.8) * (0.9 + Math.sin(elapsed * 1.3) * 0.08);
-      updateCubes(reveal, fall);
+      updateCubes(fanReveal, frame.fall);
 
-      const settle = easeInOut(elapsed / (SWEEP_SECONDS + FALL_SECONDS + 0.6));
+      const settle = frame.settle;
       const drift = Math.sin(elapsed * 0.11) * 0.045;
-      const k = 1 - Math.exp(-dt * 2.4);
-      const kYaw = 1 - Math.exp(-dt * (dragState.active ? 9 : 2.4));
+      // a skip jumps the camera to its targets instead of easing there
+      const k = snapCamera ? 1 : 1 - Math.exp(-dt * 2.4);
+      const kYaw = snapCamera ? 1 : 1 - Math.exp(-dt * (dragState.active ? 9 : 2.4));
+      snapCamera = false;
       parallax += ((interacted ? 0 : 1) - parallax) * k;
       eased.yaw += (baseYaw + 0.22 * (1 - settle) + pointer.x * 0.16 * parallax + drift + yawOffset - eased.yaw) * kYaw;
       eased.pitch += (basePitch + 0.05 * (1 - settle) - pointer.y * 0.07 * parallax + Math.cos(elapsed * 0.09) * 0.012 - eased.pitch) * k;
-      eased.dolly += (1 + 0.12 * (1 - settle) - eased.dolly) * k;
+      // act 1 holds a closer dolly (0.82x), released to the resting distance as the intro settles
+      eased.dolly += (0.82 + 0.18 * settle - eased.dolly) * k;
       const r = distance * eased.dolly;
       camera.position.set(
         target.x + r * Math.sin(eased.yaw) * Math.cos(eased.pitch),
@@ -612,13 +651,13 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
         readySent = true;
         callbacks.current.onReady();
       }
-      if (!introSent && elapsed > SWEEP_SECONDS * 0.9) {
+      if (!introSent && frame.revealUi) {
         introSent = true;
-        callbacks.current.onIntroDone();
+        callbacks.current.onIntroDone(elapsed >= INTRO_TOTAL);
       }
       // Adaptive resolution: rolling 60-frame window; step the pixel ratio down while the GPU
       // can't hold ~48 fps (never below 1).
-      if (elapsed > 0.6 && dpr > 1) {
+      if (runTime > 0.6 && dpr > 1) {
         frameSamples += 1;
         frameTotal += dt;
         if (frameSamples === 60) {
@@ -701,12 +740,26 @@ export default function FuturesScene({ summary, lite, labels, onReady, onIntroDo
     };
     canvas.addEventListener("webglcontextlost", onContextLost);
 
+    // skip: the first interaction anywhere (scrolling included) jumps to the settled state
+    const skipOptions: AddEventListenerOptions = { capture: true, passive: true };
+    const removeSkip = () => SKIP_EVENTS.forEach((type) => window.removeEventListener(type, skipIntro, skipOptions));
+    function skipIntro() {
+      removeSkip();
+      if (elapsed >= INTRO_TOTAL) return;
+      elapsed = INTRO_TOTAL;
+      snapCamera = true;
+      // paused (off screen / hidden tab): draw the settled frame now so onIntroDone still fires
+      if (!raf) render(performance.now());
+    }
+    if (elapsed < INTRO_TOTAL) SKIP_EVENTS.forEach((type) => window.addEventListener(type, skipIntro, skipOptions));
+
     resize();
     updateRunning();
 
     return () => {
       cancelAnimationFrame(raf);
       raf = 0;
+      removeSkip();
       intersection.disconnect();
       resizeObserver.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);

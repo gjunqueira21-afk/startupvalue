@@ -35,7 +35,7 @@ export default function HomePage() {
             <HeroVisual summary={futuresSummary} fallback={<FuturesFallback summary={futuresSummary} />} />
             <div className="hero-scroll-cue" aria-hidden="true"><span>SCROLL</span><i /></div>
           </div>
-          <div className="container hero-copy">
+          <div className="container hero-copy" data-intro-target>
             <p className="eyebrow"><span /> VALUATION INTELIGENTE PARA EMPRESAS</p>
             <h1>Não existe um único futuro para uma empresa. <em>Nós calculamos milhares deles.</em></h1>
             <p className="hero-subtitle">Descubra quanto vale a sua empresa: os números do negócio viram uma distribuição probabilística de valor, com milhares de cenários e premissas transparentes.</p>

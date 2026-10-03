@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { FALLBACK_VIEW, fallbackPercent, formatMillions, formatPercent, labelAnchors, type FuturesSummary, type LabelKey } from "./futures-model";
+import { markIntroSeen, shouldPlayIntro } from "./intro-timeline";
 import styles from "./hero-visual.module.css";
 
 // WebGL scene is client-only and lives in its own chunk; it is only requested after the
@@ -24,12 +25,40 @@ function hasCapableWebGL() {
   }
 }
 
+/** sessionStorage, or null where merely touching it throws (blocked storage, sandboxed frames). */
+function sessionStore(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+// Interactions that skip the intro (mirrors the scene's own skip listeners).
+const EARLY_SKIP_EVENTS = ["pointerdown", "wheel", "keydown", "touchstart", "scroll"] as const;
+
+/**
+ * The hero copy (headline, subtitle, CTAs) is server-rendered visible. Only when the intro
+ * actually plays does a client effect mark it `data-intro="playing"` (hidden by CSS); it
+ * flips to "done" when the scene reveals the UI, or whenever the intro is abandoned.
+ */
+function setCopyIntro(stage: HTMLElement | null, state: "playing" | "done") {
+  const copy = stage?.closest("section")?.querySelector<HTMLElement>("[data-intro-target]");
+  if (!copy) return;
+  if (state === "done" && !copy.dataset.intro) return; // never played: leave it untouched
+  copy.dataset.intro = state;
+}
+
 export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fallback: ReactNode }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const labelRefs = useRef<Partial<Record<LabelKey, HTMLElement | null>>>({});
   const [mode, setMode] = useState<Mode>("static");
   const [lite, setLite] = useState(false);
   const [introDone, setIntroDone] = useState(false);
+  // labels enter without the staged failure delay when the intro was skipped / never played
+  const [introSettled, setIntroSettled] = useState(false);
+  // decided once per scene mount; the scene reads it only when it is built
+  const [playIntro, setPlayIntro] = useState(false);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -39,6 +68,16 @@ export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fal
     let timeoutHandle = 0;
     let observer: IntersectionObserver | null = null;
 
+    // someone who already scrolled/clicked/typed before the scene mounted gets it settled
+    let interactedEarly = false;
+    const earlyOptions: AddEventListenerOptions = { capture: true, passive: true };
+    const removeEarly = () => EARLY_SKIP_EVENTS.forEach((type) => window.removeEventListener(type, onEarly, earlyOptions));
+    function onEarly() {
+      interactedEarly = true;
+      removeEarly();
+    }
+    EARLY_SKIP_EVENTS.forEach((type) => window.addEventListener(type, onEarly, earlyOptions));
+
     const start = () => {
       if (reduced.matches || !hasCapableWebGL()) return;
       observer = new IntersectionObserver(
@@ -46,8 +85,14 @@ export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fal
           if (!entry.isIntersecting) return;
           observer?.disconnect();
           const mount = () => {
+            removeEarly();
+            const storage = sessionStore();
+            const play = !interactedEarly && (storage ? shouldPlayIntro(storage) : true);
+            setPlayIntro(play);
+            setIntroSettled(false);
             setLite(window.matchMedia("(max-width: 760px)").matches || (navigator.hardwareConcurrency || 8) <= 2);
             setMode("loading");
+            if (play) setCopyIntro(stage, "playing");
           };
           if ("requestIdleCallback" in window) idleHandle = window.requestIdleCallback(mount, { timeout: 1500 });
           else timeoutHandle = globalThis.setTimeout(mount, 400) as unknown as number;
@@ -62,6 +107,7 @@ export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fal
         observer?.disconnect();
         setMode("static");
         setIntroDone(false);
+        setCopyIntro(stage, "done");
       } else {
         start();
       }
@@ -71,17 +117,26 @@ export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fal
     reduced.addEventListener("change", onMotionChange);
     return () => {
       observer?.disconnect();
+      removeEarly();
       if (idleHandle) window.cancelIdleCallback(idleHandle);
       if (timeoutHandle) window.clearTimeout(timeoutHandle);
       reduced.removeEventListener("change", onMotionChange);
+      setCopyIntro(stage, "done");
     };
   }, []);
 
   const onReady = useCallback(() => setMode("live"), []);
-  const onIntroDone = useCallback(() => setIntroDone(true), []);
+  const onIntroDone = useCallback((settled: boolean) => {
+    setIntroSettled(settled);
+    setIntroDone(true);
+    setCopyIntro(stageRef.current, "done");
+    const storage = sessionStore();
+    if (storage) markIntroSeen(storage);
+  }, []);
   const onFail = useCallback(() => {
     setMode("static");
     setIntroDone(false);
+    setCopyIntro(stageRef.current, "done");
   }, []);
 
   const anchors = labelAnchors(summary);
@@ -94,7 +149,7 @@ export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fal
   };
   const { terminal } = summary;
   const live = mode === "live";
-  const stageClass = [styles.stage, live ? styles.live : "", live && introDone ? styles.labelsIn : ""].join(" ");
+  const stageClass = [styles.stage, live ? styles.live : "", live && introDone ? styles.labelsIn : "", introSettled ? styles.labelsNow : ""].join(" ");
 
   return (
     <figure className={styles.visual}>
@@ -117,7 +172,7 @@ export function HeroVisual({ summary, fallback }: { summary: FuturesSummary; fal
 
         {mode !== "static" && (
           <div className={styles.canvasHost}>
-            <FuturesScene summary={summary} lite={lite} labels={labelRefs} onReady={onReady} onIntroDone={onIntroDone} onFail={onFail} />
+            <FuturesScene summary={summary} lite={lite} labels={labelRefs} playIntro={playIntro} onReady={onReady} onIntroDone={onIntroDone} onFail={onFail} />
           </div>
         )}
 

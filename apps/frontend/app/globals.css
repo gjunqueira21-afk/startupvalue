@@ -10,3 +10,11 @@
 @media(max-width:480px){.brand span{font-size:11px}.header-actions .button{padding:0 12px}.hero h1{font-size:38px}.hero-subtitle{font-size:16px}.proof-strip{grid-template-columns:1fr}.proof-strip div{border-right:0;border-bottom:1px solid var(--line-soft)}.percentile:nth-child(2),.percentile:nth-child(4){display:none}.footer-grid{grid-template-columns:1fr}.footer-bottom{flex-direction:column;gap:8px}.result-top{gap:15px}.result-top b{display:none}.result-value strong{font-size:42px}.drivers-mini>div{grid-template-columns:100px 1fr 35px}.app-metrics{grid-template-columns:1fr}.app-metrics article{border-right:0;border-bottom:1px solid var(--line)}.app-sidebar nav a{padding:7px}.audit-strip>span{width:100%}.methodology-content h2{font-size:34px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}.button:hover{transform:none}}
 .percentile-table{margin-top:24px;border-top:1px solid var(--line)}.percentile-row-real{display:grid;grid-template-columns:48px minmax(0,1fr) 110px;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line-soft);font-size:10px}.percentile-row-real>span{font:9px var(--mono);color:var(--green)}.percentile-row-real>div{height:7px;background:var(--line-soft)}.percentile-row-real i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--green))}.percentile-row-real strong{text-align:right;font:10px var(--mono);color:var(--text)}@media(max-width:760px){.percentile-row-real{grid-template-columns:42px 1fr 88px}}
+
+/* Hero copy x 3D intro. Server-rendered visible; hidden only while the client marks the
+   intro as playing (data-intro="playing"), then staged in when the scene reveals the UI. */
+.hero-copy[data-intro]>*{transition:opacity .8s ease,transform .9s cubic-bezier(.2,.7,.2,1)}
+.hero-copy[data-intro="playing"]>*{opacity:0;transform:translateY(12px)}
+.hero-copy[data-intro="done"]>:nth-child(2){transition-delay:.08s}
+.hero-copy[data-intro="done"]>:nth-child(3){transition-delay:.16s}
+.hero-copy[data-intro="done"]>:nth-child(n+4){transition-delay:.24s}
