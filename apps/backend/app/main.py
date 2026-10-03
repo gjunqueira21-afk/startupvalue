@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.auth import router as auth_router
+from app.api.routes.branding import router as branding_router
 from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.health import router as health_router
 from app.api.routes.reports import router as reports_router
@@ -32,6 +33,7 @@ app.include_router(dashboard_router)
 app.include_router(simulations_router)
 app.include_router(reports_router)
 app.include_router(workspace_router)
+app.include_router(branding_router)
 
 
 @app.get("/api/v1/meta", tags=["meta"])

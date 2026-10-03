@@ -226,6 +226,22 @@ class Report(TimestampMixin, Base):
     checksum: Mapped[str | None] = mapped_column(String(64))
 
 
+class ReportBranding(TimestampMixin, Base):
+    """Per-workspace white-label settings applied to generated PDF reports."""
+
+    __tablename__ = "report_branding"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4_str)
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    firm_name: Mapped[str | None] = mapped_column(String(120))
+    primary_color: Mapped[str | None] = mapped_column(String(7))
+    footer_text: Mapped[str | None] = mapped_column(String(300))
+    logo_bytes: Mapped[bytes | None] = mapped_column(LargeBinary)
+    logo_media_type: Mapped[str | None] = mapped_column(String(32))
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 
