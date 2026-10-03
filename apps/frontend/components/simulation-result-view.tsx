@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, ApiError } from "@/lib/api/client";
 import {
   getDecision,
@@ -14,6 +14,7 @@ import {
   type TargetPlan,
 } from "@/lib/api/simulations";
 import { basisLabel } from "@/lib/format";
+import { createRequestGuard } from "@/lib/request-guard";
 import { suggestedTarget } from "@/lib/results";
 import { AppShell } from "./app-shell";
 import { DistributionCard, MethodsCard, TargetCard } from "./results/analysis-sections";
@@ -48,12 +49,30 @@ function ResultContent({ simulation }: { simulation: SimulationResponse }) {
   const [loadError, setLoadError] = useState("");
   const [targetError, setTargetError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Guards against out-of-order responses: two quick "Analisar" clicks (or the
+  // initial load racing a fast click) must not let a stale response win.
+  const requestGuard = useRef(createRequestGuard()).current;
 
   useEffect(() => {
     if (!summary) return;
     const controller = new AbortController();
+
+    // Decision doesn't depend on the target value, so it is independent of the
+    // insight/target/plan race below: it is not tied to the shared request
+    // token, or a fast "Analisar" click during this initial load would discard
+    // it forever (nothing else ever re-fetches it).
+    getDecision(simulation.simulation_id, controller.signal)
+      .then(setDecision)
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setLoadError("A análise executiva desta simulação não pôde ser carregada.");
+      });
+
+    // insight + target + plan all describe "the current target analysis", so they
+    // share one request-guard token with analyze() below: whichever of the
+    // initial load or a fast "Analisar" click resolves last is the one that wins.
+    const token = requestGuard.start();
     Promise.all([
-      getDecision(simulation.simulation_id, controller.signal),
       getInsight(simulation.simulation_id, defaultTarget, controller.signal),
       defaultTarget === null
         ? Promise.resolve(null)
@@ -62,21 +81,26 @@ function ResultContent({ simulation }: { simulation: SimulationResponse }) {
         // of the page, so it gets its own catch instead of joining the one below.
         : getTarget(simulation.simulation_id, defaultTarget, controller.signal).catch(() => null),
     ])
-      .then(([decisionResult, insightResult, targetResult]) => {
-        setDecision(decisionResult);
+      .then(([insightResult, targetResult]) => {
+        if (!requestGuard.isCurrent(token)) return;
         setInsight(insightResult);
         setPlan(targetResult?.plan ?? null);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
+        if (!requestGuard.isCurrent(token)) return;
         setLoadError("A análise executiva desta simulação não pôde ser carregada.");
       });
     return () => controller.abort();
-  }, [simulation.simulation_id, summary, defaultTarget]);
+  }, [simulation.simulation_id, summary, defaultTarget, requestGuard]);
 
   const analyze = useCallback(async (value: number) => {
+    const token = requestGuard.start();
     setBusy(true);
     setTargetError("");
+    // Clear immediately: a failed or superseded analysis must never leave a
+    // stale "Plano para a meta" from a previous target value on screen.
+    setPlan(null);
     try {
       const [insightResult, targetResult] = await Promise.all([
         getInsight(simulation.simulation_id, value),
@@ -84,15 +108,17 @@ function ResultContent({ simulation }: { simulation: SimulationResponse }) {
         // must not surface as a target-analysis error.
         getTarget(simulation.simulation_id, value).catch(() => null),
       ]);
+      if (!requestGuard.isCurrent(token)) return;
       setInsight(insightResult);
       setTarget(value);
       setPlan(targetResult?.plan ?? null);
     } catch {
+      if (!requestGuard.isCurrent(token)) return;
       setTargetError("Não foi possível analisar esta meta.");
     } finally {
-      setBusy(false);
+      if (requestGuard.isCurrent(token)) setBusy(false);
     }
-  }, [simulation.simulation_id]);
+  }, [simulation.simulation_id, requestGuard]);
 
   const reportUrl = `${API_URL}/api/v1/simulations/${simulation.simulation_id}/report.pdf${target === null ? "" : `?target=${encodeURIComponent(target)}`}`;
 
