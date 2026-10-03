@@ -5,6 +5,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { formatCurrencyInput, formatCurrencyValue } from "./currency";
 import { createSimulation } from "@/lib/api/simulations";
+import { getEntitlements, type Entitlements } from "@/lib/api/branding";
+import { listStartups, type StartupSummary } from "@/lib/api/startups";
+import {
+  PLAN_LIMIT_MESSAGES,
+  checkSubmission,
+  clampSimulationCount,
+  planLimitCode,
+  simulationCountOptions,
+  type PlanLimitCode,
+} from "./plan-limits";
 import { DEFAULT_DRAFT, DRAFT_STORAGE_KEY, UNCERTAINTY_PRESETS, freshDraft, hydrateDraft } from "./defaults";
 import { RevenueChart } from "./revenue-chart";
 import type {
@@ -165,8 +175,49 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
     | { kind: "idle" }
     | { kind: "loading" }
     | { kind: "success"; simulationId: string; status: string; resultHash: string | null }
-    | { kind: "error"; message: string }
+    | { kind: "error"; message: string; code?: PlanLimitCode }
   >({ kind: "idle" });
+  // Plan limits and the workspace's active companies, fetched on mount so a
+  // run the plan would reject is never submitted (and never burns a slot).
+  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  const [companies, setCompanies] = useState<StartupSummary[] | null>(null);
+  /** Existing company the run attaches to; null = create a new company. */
+  const [startupId, setStartupId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getEntitlements(controller.signal).then(setEntitlements).catch(() => undefined);
+    listStartups(controller.signal)
+      .then((items) => {
+        setCompanies(items);
+        // The "novo cenário" entry point defaults to the newest company.
+        if (context === "scenario" && items.length > 0) {
+          setStartupId(items[0].id);
+          setDraft((current) => ({ ...current, company: { ...current.company, name: items[0].name } }));
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [context]);
+
+  useEffect(() => {
+    if (!hydrated || entitlements === null) return;
+    setDraft((current) => {
+      const clamped = clampSimulationCount(current.monteCarlo.simulationCount, entitlements.max_scenarios_per_run);
+      return clamped === current.monteCarlo.simulationCount
+        ? current
+        : { ...current, monteCarlo: { ...current.monteCarlo, simulationCount: clamped } };
+    });
+  }, [hydrated, entitlements]);
+
+  const companyLimitReached = startupId === null
+    && !checkSubmission({ entitlements, companyCount: companies?.length ?? null, createsCompany: true, simulationCount: 0 }).ok;
+
+  const selectCompany = (id: string) => {
+    const company = companies?.find((item) => item.id === id);
+    setStartupId(company ? company.id : null);
+    if (company) updateCompany("name", company.name);
+  };
 
   useEffect(() => {
     try {
@@ -269,9 +320,19 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
       if (firstInvalid !== undefined) setStep(firstInvalid);
       return;
     }
+    const check = checkSubmission({
+      entitlements,
+      companyCount: companies?.length ?? null,
+      createsCompany: startupId === null,
+      simulationCount: draft.monteCarlo.simulationCount,
+    });
+    if (!check.ok) {
+      setSubmission({ kind: "error", code: check.code, message: PLAN_LIMIT_MESSAGES[check.code] });
+      return;
+    }
     setSubmission({ kind: "loading" });
     try {
-      const result = await createSimulation(draft);
+      const result = await createSimulation(draft, undefined, { startupId });
       setSubmission({
         kind: "success",
         simulationId: result.simulation_id,
@@ -279,6 +340,11 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
         resultHash: result.result_hash,
       });
     } catch (error) {
+      const code = error instanceof ApiError ? planLimitCode(error.details) : null;
+      if (code) {
+        setSubmission({ kind: "error", code, message: PLAN_LIMIT_MESSAGES[code] });
+        return;
+      }
       const message = error instanceof ApiError
         ? `${error.message} O rascunho permanece salvo. Código HTTP: ${error.status}.`
         : "O backend não respondeu. O rascunho permanece salvo neste dispositivo.";
@@ -291,7 +357,9 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
   function renderStep() {
     if (step === 0) return (
       <div className={styles.grid2}>
-        <div className={styles.field}><label htmlFor="company-name">Nome da empresa</label><input id="company-name" value={draft.company.name} onChange={(event) => updateCompany("name", event.target.value)} aria-invalid={Boolean(errors["company.name"])} />{errors["company.name"] && <span className={styles.error}>{errors["company.name"]}</span>}</div>
+        {companies !== null && companies.length > 0 && <div className={styles.field}><label htmlFor="company-select">Empresa</label><select id="company-select" value={startupId ?? ""} onChange={(event) => selectCompany(event.target.value)}>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}<option value="">ou criar nova empresa</option></select><small>Uma nova análise de empresa existente não consome vaga do plano.</small></div>}
+        {companyLimitReached && <p className={styles.error} role="alert">{PLAN_LIMIT_MESSAGES.plan_limit_startups} <Link href="/pricing">Ver planos</Link></p>}
+        <div className={styles.field}><label htmlFor="company-name">Nome da empresa</label><input id="company-name" value={draft.company.name} readOnly={startupId !== null} onChange={(event) => updateCompany("name", event.target.value)} aria-invalid={Boolean(errors["company.name"])} />{errors["company.name"] && <span className={styles.error}>{errors["company.name"]}</span>}</div>
         <div className={styles.field}><label htmlFor="scenario-name">Nome do cenário</label><input id="scenario-name" value={draft.company.scenarioName} onChange={(event) => updateCompany("scenarioName", event.target.value)} aria-invalid={Boolean(errors["company.scenarioName"])} />{errors["company.scenarioName"] && <span className={styles.error}>{errors["company.scenarioName"]}</span>}</div>
         <div className={styles.field}><label htmlFor="sector">Setor</label><input id="sector" placeholder="Ex.: Comércio, Serviços, Indústria" value={draft.company.sector} onChange={(event) => updateCompany("sector", event.target.value)} aria-invalid={Boolean(errors["company.sector"])} />{errors["company.sector"] && <span className={styles.error}>{errors["company.sector"]}</span>}</div>
         <div className={styles.field}><label htmlFor="country">País</label><input id="country" value={draft.company.country} onChange={(event) => updateCompany("country", event.target.value)} /></div>
@@ -363,7 +431,7 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
 
     if (step === 5) return (
       <>
-        <section className={styles.sectionBlock}><h3>Quantidade e reprodutibilidade</h3><div className={styles.grid2}><div className={styles.field}><label htmlFor="simulation-count">Cenários simulados</label><select id="simulation-count" value={draft.monteCarlo.simulationCount} onChange={(event) => updateMonteCarlo("simulationCount", Number(event.target.value) as MonteCarloAssumptions["simulationCount"])}><option value={1000}>1.000</option><option value={5000}>5.000</option><option value={10000}>10.000</option><option value={25000}>25.000</option></select><small>Mais cenários aumentam a estabilidade amostral e o tempo de processamento.</small></div><div className={styles.field}><label htmlFor="seed">Random seed</label><div className={styles.seedRow}><input id="seed" type="number" min={0} step={1} value={draft.monteCarlo.randomSeed} onChange={(event) => updateMonteCarlo("randomSeed", Number(event.target.value))} aria-invalid={Boolean(errors["monteCarlo.randomSeed"])} /><button type="button" onClick={() => updateMonteCarlo("randomSeed", Math.floor(Math.random() * 2_147_483_647))}>GERAR</button></div><small>A mesma seed, inputs, versão e amostra reproduzem o resultado.</small>{errors["monteCarlo.randomSeed"] && <span className={styles.error}>{errors["monteCarlo.randomSeed"]}</span>}</div></div></section>
+        <section className={styles.sectionBlock}><h3>Quantidade e reprodutibilidade</h3><div className={styles.grid2}><div className={styles.field}><label htmlFor="simulation-count">Cenários simulados</label><select id="simulation-count" value={draft.monteCarlo.simulationCount} onChange={(event) => updateMonteCarlo("simulationCount", Number(event.target.value) as MonteCarloAssumptions["simulationCount"])}>{simulationCountOptions(entitlements?.max_scenarios_per_run ?? null).map((option) => <option key={option.value} value={option.value} disabled={!option.allowed}>{integer.format(option.value)}{option.requiredPlan ? ` — disponível no plano ${option.requiredPlan}` : ""}</option>)}</select><small>Mais cenários aumentam a estabilidade amostral e o tempo de processamento.{entitlements && entitlements.max_scenarios_per_run < 25_000 && <> Seu plano permite até {integer.format(entitlements.max_scenarios_per_run)} por execução — <Link href="/pricing">ver planos</Link>.</>}</small></div><div className={styles.field}><label htmlFor="seed">Random seed</label><div className={styles.seedRow}><input id="seed" type="number" min={0} step={1} value={draft.monteCarlo.randomSeed} onChange={(event) => updateMonteCarlo("randomSeed", Number(event.target.value))} aria-invalid={Boolean(errors["monteCarlo.randomSeed"])} /><button type="button" onClick={() => updateMonteCarlo("randomSeed", Math.floor(Math.random() * 2_147_483_647))}>GERAR</button></div><small>A mesma seed, inputs, versão e amostra reproduzem o resultado.</small>{errors["monteCarlo.randomSeed"] && <span className={styles.error}>{errors["monteCarlo.randomSeed"]}</span>}</div></div></section>
         <section className={styles.sectionBlock}><h3>Quão incerta é sua projeção?</h3><p>No modo simples, os níveis aplicam dispersões documentadas às variáveis. Você poderá auditar os percentuais na revisão.</p><div className={styles.optionGrid}>{(["low", "medium", "high"] as const).map((level) => <button type="button" key={level} className={`${styles.optionButton} ${draft.monteCarlo.uncertaintyLevel === level ? styles.selected : ""}`} onClick={() => selectUncertainty(level)}><strong>{level === "low" ? "Baixa" : level === "medium" ? "Média" : "Alta"}</strong><small>{UNCERTAINTY_PRESETS[level].revenueUncertainty}% de incerteza de receita</small></button>)}</div></section>
         <section className={styles.sectionBlock}><div className={styles.grid2}><NumberField id="failure" label="Probabilidade de encerramento" value={draft.monteCarlo.failureProbability} min={0} max={100} step={0.1} onChange={(value) => updateMonteCarlo("failureProbability", value ?? 0)} suffix="% dos cenários entram no estado Failure" error={errors["monteCarlo.failureProbability"]} />{draft.mode === "professional" && <NumberField id="serial-correlation" label="Persistência temporal" value={draft.monteCarlo.serialCorrelation} min={0} max={0.99} step={0.05} onChange={(value) => updateMonteCarlo("serialCorrelation", value ?? 0)} suffix="correlação serial dos choques" error={errors["monteCarlo.serialCorrelation"]} />}</div></section>
         {draft.mode === "professional" && <section className={styles.professionalBox}><p>CONTROLES PROFISSIONAIS</p><div className={styles.grid3}><div className={styles.field}><label htmlFor="distribution">Distribuição da receita</label><select id="distribution" value={draft.monteCarlo.distribution} onChange={(event) => updateMonteCarlo("distribution", event.target.value as MonteCarloAssumptions["distribution"])}><option value="lognormal">LogNormal</option><option value="student_t">Student-t</option><option value="triangular">Triangular</option><option value="uniform">Uniform</option></select></div><NumberField id="revenue-uncertainty" label="Incerteza de receita" value={draft.monteCarlo.revenueUncertainty} min={0} max={200} step={0.1} onChange={(value) => updateMonteCarlo("revenueUncertainty", value ?? 0)} suffix="%" /><NumberField id="margin-uncertainty" label="Incerteza de margem" value={draft.monteCarlo.marginUncertainty} min={0} max={100} step={0.1} onChange={(value) => updateMonteCarlo("marginUncertainty", value ?? 0)} suffix="pontos percentuais" /><NumberField id="cost-uncertainty" label="Incerteza de custos" value={draft.monteCarlo.costUncertainty} min={0} max={200} step={0.1} onChange={(value) => updateMonteCarlo("costUncertainty", value ?? 0)} suffix="%" />{draft.monteCarlo.distribution === "student_t" && <NumberField id="student-df" label="Graus de liberdade" value={draft.monteCarlo.studentDegreesFreedom} min={2.01} step={0.1} onChange={(value) => updateMonteCarlo("studentDegreesFreedom", value ?? 5)} error={errors["monteCarlo.studentDegreesFreedom"]} />}{draft.monteCarlo.distribution === "triangular" && <><NumberField id="tri-min" label="Mínimo" value={draft.monteCarlo.triangularMinimum} step={0.05} onChange={(value) => updateMonteCarlo("triangularMinimum", value ?? 0)} suffix="multiplicador" /><NumberField id="tri-mode" label="Moda" value={draft.monteCarlo.triangularMode} step={0.05} onChange={(value) => updateMonteCarlo("triangularMode", value ?? 1)} suffix="multiplicador" error={errors["monteCarlo.triangularMode"]} /><NumberField id="tri-max" label="Máximo" value={draft.monteCarlo.triangularMaximum} step={0.05} onChange={(value) => updateMonteCarlo("triangularMaximum", value ?? 1)} suffix="multiplicador" /></>}</div></section>}
@@ -384,7 +452,7 @@ export function ValuationWizard({ context = "company" }: { context?: "company" |
           <ReviewCard title="Rastreabilidade da execução" onEdit={() => goToStep(5)} wide><Entry label="Versão esperada do modelo" value="3.2.0-dev" /><Entry label="Fluxo de persistência" value="Empresa → Cenário → Revisão → Simulaçn" /><Entry label="Fonte do resultado" value="SimulationResult persistido pelo backend" /><Entry label="Rascunho" value="Local neste dispositivo até a API persistir o cenário" /></ReviewCard>
         </div>
         {submission.kind === "success" && <div className={`${styles.submitState} ${styles.success}`} role="status"><strong>Simulação persistida pelo backend.</strong>ID {submission.simulationId} · status {submission.status}{submission.resultHash ? ` · hash ${submission.resultHash.slice(0, 12)}` : ""}. Nenhum resultado foi fabricado no frontend.<div className={styles.submitActions}><Link className="button button-secondary" href={`/app/simulations/${submission.simulationId}`}>Abrir resultado</Link></div></div>}
-        {submission.kind === "error" && <div className={`${styles.submitState} ${styles.errorState}`} role="alert"><strong>A execução não foi iniciada.</strong>{submission.message}</div>}
+        {submission.kind === "error" && <div className={`${styles.submitState} ${styles.errorState}`} role="alert"><strong>A execução não foi iniciada.</strong>{submission.message}{submission.code && <> <Link href="/pricing">Ver planos</Link></>}</div>}
       </>
     );
   }

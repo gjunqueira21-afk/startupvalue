@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getTarget } from "./simulations";
+import { DEFAULT_DRAFT } from "../../components/wizard/defaults";
+import { createSimulation, getTarget } from "./simulations";
 
 function mockJsonFetch(body: unknown) {
   return vi.fn().mockResolvedValue({
@@ -86,5 +87,74 @@ describe("getTarget", () => {
 
     const [url] = fetchMock.mock.calls[0] as [string];
     expect(url).toContain(`value=${encodeURIComponent(1_500_000.5)}`);
+  });
+});
+
+describe("createSimulation", () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  function routedFetch(scenarios: unknown[]) {
+    return vi.fn(async (url: string, init?: RequestInit) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      const path = url.replace(/^https?:\/\/[^/]+/, "");
+      let body: unknown = {};
+      if (path === "/api/v1/auth/csrf") body = { csrf_token: "tok" };
+      else if (path === "/api/v1/startups" && method === "POST") body = { id: "new-startup" };
+      else if (path.endsWith("/scenarios") && method === "GET") body = scenarios;
+      else if (path.endsWith("/scenarios") && method === "POST") body = { id: "new-scenario" };
+      else if (path.endsWith("/revisions")) body = { id: "revision-123456789" };
+      else if (path === "/api/v1/simulations") body = { simulation_id: "sim", status: "succeeded", result_hash: null };
+      return { ok: true, json: async () => body };
+    });
+  }
+
+  function draft() {
+    const value = structuredClone(DEFAULT_DRAFT);
+    value.company.name = "Acme";
+    value.metrics.grossMargin = 60;
+    value.revenue.years = [100, 200, 300, 400, 500];
+    return value;
+  }
+
+  const calls = (fetchMock: ReturnType<typeof routedFetch>) =>
+    fetchMock.mock.calls.map(([url, init]) => `${(init?.method ?? "GET").toUpperCase()} ${String(url).replace(/^https?:\/\/[^/]+/, "")}`);
+
+  it("attaches to an existing company without POSTing a new startup and reuses the same-named scenario", async () => {
+    const fetchMock = routedFetch([{ id: "existing-scenario", startup_id: "s1", name: "Base case", mode: "simple" }]);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await createSimulation(draft(), undefined, { startupId: "s1" });
+
+    const made = calls(fetchMock);
+    expect(made).not.toContain("POST /api/v1/startups");
+    expect(made).not.toContain("POST /api/v1/startups/s1/scenarios");
+    expect(made).toContain("GET /api/v1/startups/s1/scenarios");
+    expect(made).toContain("POST /api/v1/scenarios/existing-scenario/revisions");
+  });
+
+  it("creates a scenario under the existing company when no name matches", async () => {
+    const fetchMock = routedFetch([]);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await createSimulation(draft(), undefined, { startupId: "s1" });
+
+    const made = calls(fetchMock);
+    expect(made).not.toContain("POST /api/v1/startups");
+    expect(made).toContain("POST /api/v1/startups/s1/scenarios");
+  });
+
+  it("creates a new company when no startup id is given", async () => {
+    const fetchMock = routedFetch([]);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await createSimulation(draft());
+
+    const made = calls(fetchMock);
+    expect(made).toContain("POST /api/v1/startups");
+    expect(made).toContain("POST /api/v1/startups/new-startup/scenarios");
   });
 });

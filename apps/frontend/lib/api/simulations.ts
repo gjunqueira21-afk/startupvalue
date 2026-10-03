@@ -1,5 +1,6 @@
 import type { RangeInput, TerminalMetric, ValuationWizardDraft } from "@/components/wizard/types";
 import { apiRequest } from "./client";
+import { listScenarios } from "./startups";
 
 export interface CreateSimulationResponse {
   simulation_id: string;
@@ -433,21 +434,34 @@ export function buildCanonicalInputs(draft: ValuationWizardDraft): CanonicalInpu
   };
 }
 
+/**
+ * Runs the wizard's persistence chain Startup → Scenario → Revision →
+ * Simulation. With `startupId` the run attaches to that existing company
+ * (no new plan slot is consumed) and reuses a same-named active scenario
+ * (a new revision is appended) instead of tripping the per-company unique
+ * scenario name.
+ */
 export async function createSimulation(
   draft: ValuationWizardDraft,
   signal?: AbortSignal,
+  options: { startupId?: string | null } = {},
 ): Promise<SimulationResponse> {
-  const startup = await apiRequest<StartupResponse>("/api/v1/startups", {
-    method: "POST",
-    body: JSON.stringify({
-      name: draft.company.name,
-      currency: "BRL",
-      profile: profilePayload(draft),
-    }),
-    signal,
-  });
-  const scenario = await apiRequest<ScenarioResponse>(
-    `/api/v1/startups/${startup.id}/scenarios`,
+  const startupId = options.startupId
+    ?? (await apiRequest<StartupResponse>("/api/v1/startups", {
+      method: "POST",
+      body: JSON.stringify({
+        name: draft.company.name,
+        currency: "BRL",
+        profile: profilePayload(draft),
+      }),
+      signal,
+    })).id;
+  const scenarioName = draft.company.scenarioName.trim();
+  const existingScenario = options.startupId
+    ? (await listScenarios(startupId, signal)).find((scenario) => scenario.name === scenarioName)
+    : undefined;
+  const scenario = existingScenario ?? await apiRequest<ScenarioResponse>(
+    `/api/v1/startups/${startupId}/scenarios`,
     {
       method: "POST",
       body: JSON.stringify({ name: draft.company.scenarioName, mode: draft.mode }),
