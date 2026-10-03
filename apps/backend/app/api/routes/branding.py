@@ -126,12 +126,27 @@ def update_branding(
     return _to_response(branding)
 
 
+async def _read_bounded_body(request: Request) -> bytes:
+    """Stream the request body, aborting with 413 before buffering past the cap.
+
+    Never materializes more than ``MAX_LOGO_BYTES`` plus one in-flight chunk in
+    memory, unlike ``await request.body()`` which fully buffers first and
+    checks size second.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > MAX_LOGO_BYTES:
+            raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "logo_too_large")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @router.post("/branding/logo", response_model=BrandingResponse)
 async def upload_logo(request: Request, db: Database, actor: Actor) -> BrandingResponse:
     _authorize(db, actor)
-    body = await request.body()
-    if len(body) > MAX_LOGO_BYTES:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "logo_too_large")
+    body = await _read_bounded_body(request)
     media_type = next(
         (mt for magic, mt in _MEDIA_TYPE_BY_MAGIC if body.startswith(magic)), None
     )
