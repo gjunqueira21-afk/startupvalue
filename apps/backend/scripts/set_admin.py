@@ -35,11 +35,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     granted = bool(args.grant)
+    # Signup stores emails stripped and lower-cased; match that normalization.
+    email = args.email.strip().lower()
 
     with SessionLocal() as db:
-        user = db.scalar(select(User).where(User.email == args.email))
+        user = db.scalar(select(User).where(User.email == email))
         if user is None:
-            print(f"user not found: {args.email}", file=sys.stderr)
+            print(f"user not found: {email}", file=sys.stderr)
             return 1
         user.is_platform_admin = granted
         db.flush()
@@ -54,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         db.commit()
 
-    print(f"user {args.email} admin flag set to {granted}")
+    print(f"user {email} admin flag set to {granted}")
     return 0
 
 

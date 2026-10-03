@@ -164,13 +164,12 @@ de senha estiver ativo) a cada comando acima; o serviço `caddy` fica parado
    teste:
    ```bash
    docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml \
-     exec -T backend python - --user-id <uuid-do-usuario-de-teste> --grant \
+     exec -T backend python - --email <email-do-usuario-de-teste> --grant \
      < apps/backend/scripts/set_admin.py
    ```
-   Confirmar o nome exato do script e seus argumentos no código da Task 18
-   antes de copiar este comando literalmente. Se o script ainda não existir
-   no commit em deploy, esta etapa só se aplica a partir da Task 18 e não
-   bloqueia o go-live das Tasks 1-17.
+   O e-mail é normalizado (espaços removidos, minúsculas) como no cadastro.
+   Para revogar ao final do teste, repetir o comando trocando `--grant` por
+   `--revoke`.
 
 ## 7. Backup e rollback
 
