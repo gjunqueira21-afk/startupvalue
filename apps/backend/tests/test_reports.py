@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import UTC, date, datetime
 from io import BytesIO
 
@@ -7,7 +8,12 @@ import pytest
 from pydantic import ValidationError
 from pypdf import PdfReader
 
-from app.reports import ReportData, build_report_pdf
+from app.reports import ReportBrandingData, ReportData, build_report_pdf
+
+# Canonical minimal 1x1 opaque PNG (68 bytes), decodable by reportlab's ImageReader.
+TINY_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
 
 
 def report_payload() -> dict[str, object]:
@@ -258,3 +264,77 @@ def test_report_rejects_non_monotonic_percentiles() -> None:
 
     with pytest.raises(ValidationError, match="percentiles must be nondecreasing"):
         ReportData.model_validate(payload)
+
+
+# --- Task 9: white-label branding and free-tier watermark --------------------
+
+
+def test_branded_report_renders_firm_name_and_logo_and_hides_quantovale() -> None:
+    data = ReportData.model_validate(report_payload())
+    branding = ReportBrandingData(
+        firm_name="Alfa Consultoria",
+        primary_color="#123456",
+        footer_text="Relatório preparado por Alfa Consultoria",
+        logo_bytes=TINY_PNG,
+        logo_media_type="image/png",
+    )
+
+    pdf_bytes = build_report_pdf(data, branding=branding)
+
+    assert pdf_bytes.startswith(b"%PDF")
+    reader = PdfReader(BytesIO(pdf_bytes))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "Alfa Consultoria" in text
+    # The product mark/name is replaced everywhere except audit identifiers
+    # and disclaimers, which must always render.
+    assert "STARTUPVALUE" not in text
+    assert "sim-471829-alpha" in text  # audit identifier: always present
+    assert "não são garantia de valor" in text  # disclaimer: always present
+
+
+def test_branded_report_with_corrupt_logo_bytes_still_renders() -> None:
+    data = ReportData.model_validate(report_payload())
+    branding = ReportBrandingData(
+        firm_name="Beta Capital",
+        logo_bytes=b"not an image",
+        logo_media_type="image/png",
+    )
+
+    pdf_bytes = build_report_pdf(data, branding=branding)
+
+    assert pdf_bytes.startswith(b"%PDF")
+    reader = PdfReader(BytesIO(pdf_bytes))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "Beta Capital" in text
+
+
+def test_unbranded_report_still_shows_product_name() -> None:
+    data = ReportData.model_validate(report_payload())
+
+    pdf_bytes = build_report_pdf(data)
+
+    reader = PdfReader(BytesIO(pdf_bytes))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "STARTUPVALUE" in text
+
+
+def test_watermark_renders_and_changes_output_size() -> None:
+    data = ReportData.model_validate(report_payload())
+
+    plain = build_report_pdf(data)
+    watermarked = build_report_pdf(data, watermark=True)
+
+    assert watermarked.startswith(b"%PDF")
+    assert len(watermarked) != len(plain)
+    reader = PdfReader(BytesIO(watermarked))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "QUANTOVALE" in text
+    assert "RESUMO GRATUITO" in text
+
+
+def test_default_build_report_pdf_call_is_unaffected_by_new_parameters() -> None:
+    data = ReportData.model_validate(report_payload())
+
+    pdf_bytes = build_report_pdf(data)
+
+    assert pdf_bytes.startswith(b"%PDF-")

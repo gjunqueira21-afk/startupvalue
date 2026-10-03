@@ -14,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.entitlements import PlanTier, set_workspace_plan
 from app.db.base import Base, get_db
+from app.db.models import ReportBranding
 from app.main import app
 
 
@@ -54,6 +55,30 @@ def _signup(client: TestClient, name: str) -> dict[str, object]:
 def _upgrade_plan(factory: sessionmaker[Session], workspace_id: str, plan: PlanTier) -> None:
     with factory() as db:
         set_workspace_plan(db, workspace_id=workspace_id, plan=plan, actor_id=None)
+        db.commit()
+
+
+def _set_branding_row(
+    factory: sessionmaker[Session],
+    workspace_id: str,
+    *,
+    firm_name: str = "Alfa Consultoria",
+    primary_color: str | None = "#123456",
+) -> None:
+    """Insert a branding row directly, bypassing the entitlement-gated API.
+
+    Used to prove the report route still enforces ``white_label`` itself
+    (defense in depth) even when a branding row already exists for a
+    workspace that later downgrades, or never had access in the first place.
+    """
+    with factory() as db:
+        db.add(
+            ReportBranding(
+                workspace_id=workspace_id,
+                firm_name=firm_name,
+                primary_color=primary_color,
+            )
+        )
         db.commit()
 
 
@@ -258,3 +283,78 @@ def test_report_download_requires_session_and_workspace(
     assert outsider.get(url).status_code == 404
     assert outsider.get(f"{url}?target=20000000").status_code == 404
     assert owner.get("/api/v1/simulations/nonexistent/report.pdf").status_code == 404
+
+
+# --- Task 9: white-label and watermark route behavior ------------------------
+
+
+def test_free_workspace_with_branding_row_still_gets_unbranded_watermarked_pdf(
+    clients: tuple[TestClient, TestClient, TestClient, sessionmaker[Session]],
+) -> None:
+    """Free tier never gets white-label, even if a branding row exists.
+
+    This covers the case of a workspace that configured branding on a paid
+    plan and then downgraded (or a row inserted out-of-band): the route must
+    resolve entitlements itself rather than trusting the presence of a row.
+    """
+    owner, _, _, factory = clients
+    session = _signup(owner, "free-branded")
+    _set_branding_row(factory, str(session["workspace_id"]))
+    simulation_id = _simulate(owner)["simulation_id"]
+
+    response = owner.get(f"/api/v1/simulations/{simulation_id}/report.pdf")
+
+    assert response.status_code == 200, response.text
+    assert "quantovale-" in response.headers["content-disposition"]
+    text = "\n".join(
+        page.extract_text() or "" for page in PdfReader(BytesIO(response.content)).pages
+    )
+    assert "Alfa Consultoria" not in text
+    assert "STARTUPVALUE" in text
+    assert "RESUMO GRATUITO" in text
+
+
+def test_consultor_workspace_with_branding_gets_branded_pdf_and_audit_event(
+    clients: tuple[TestClient, TestClient, TestClient, sessionmaker[Session]],
+) -> None:
+    owner, _, _, factory = clients
+    session = _signup(owner, "consultor-branded")
+    workspace_id = str(session["workspace_id"])
+    _upgrade_plan(factory, workspace_id, PlanTier.consultor)
+    _set_branding_row(factory, workspace_id)
+    simulation_id = _simulate(owner)["simulation_id"]
+
+    response = owner.get(f"/api/v1/simulations/{simulation_id}/report.pdf")
+
+    assert response.status_code == 200, response.text
+    assert "quantovale-" in response.headers["content-disposition"]
+    text = "\n".join(
+        page.extract_text() or "" for page in PdfReader(BytesIO(response.content)).pages
+    )
+    assert "Alfa Consultoria" in text
+    assert "STARTUPVALUE" not in text
+    assert "RESUMO GRATUITO" not in text
+
+    with factory() as db:
+        from app.db.models import AuditEvent
+
+        events = db.query(AuditEvent).filter(
+            AuditEvent.workspace_id == workspace_id, AuditEvent.action == "report.download"
+        ).all()
+        assert len(events) == 1
+        assert events[0].resource_id is not None
+
+
+def test_report_filename_uses_quantovale_prefix(
+    clients: tuple[TestClient, TestClient, TestClient, sessionmaker[Session]],
+) -> None:
+    owner, _, _, _ = clients
+    _signup(owner, "filename-check")
+    simulation_id = _simulate(owner)["simulation_id"]
+
+    response = owner.get(f"/api/v1/simulations/{simulation_id}/report.pdf")
+
+    assert response.status_code == 200, response.text
+    disposition = response.headers["content-disposition"]
+    assert f'filename="quantovale-{simulation_id}.pdf"' in disposition
+    assert "startupvalue-" not in disposition

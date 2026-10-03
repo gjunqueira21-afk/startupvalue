@@ -10,6 +10,7 @@ footer can print "Página N de M"; both passes are deterministic.
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections.abc import Callable
 from io import BytesIO
@@ -20,6 +21,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import (
     BaseDocTemplate,
@@ -76,11 +78,12 @@ from .pdf_theme import (
 from .pdf_theme import (
     styles as report_styles,
 )
-from .schema import MethodAnalysis, PercentileKey, ReportData
+from .schema import MethodAnalysis, PercentileKey, ReportBrandingData, ReportData
 
 PAGE_WIDTH, PAGE_HEIGHT = A4
 COVER_TINT = colors.HexColor("#E3EEE8")
 ASSUMPTIONS_INLINE = 14
+WATERMARK_TEXT = "QUANTOVALE · RESUMO GRATUITO"
 
 DRIVER_STATUS = {
     "estimated": "estimado",
@@ -148,9 +151,9 @@ def _breakeven_label(name: str) -> str:
 # --------------------------------------------------------------------------- chrome
 
 
-def _brand_mark(canvas: Canvas, x: float, y: float, size: float) -> None:
+def _brand_mark(canvas: Canvas, x: float, y: float, size: float, color: Any = GREEN) -> None:
     """Square brand mark: three ascending bars, a stylised distribution."""
-    canvas.setFillColor(GREEN)
+    canvas.setFillColor(color)
     canvas.rect(x, y, size, size, stroke=0, fill=1)
     canvas.setFillColor(WHITE)
     bar = size * 0.16
@@ -161,25 +164,88 @@ def _brand_mark(canvas: Canvas, x: float, y: float, size: float) -> None:
         )
 
 
-def _cover(data: ReportData, styles: dict[str, ParagraphStyle]) -> Callable[[Canvas, Any], None]:
+def _logo_reader(branding: ReportBrandingData | None) -> ImageReader | None:
+    """Decode the firm's logo, or None on any failure (silently skipped).
+
+    Any exception from reading/decoding the stored bytes — corrupt data, an
+    unsupported format, a truncated upload — must never fail report
+    generation; the cover simply renders without a logo.
+    """
+    if branding is None or not branding.logo_bytes:
+        return None
+    try:
+        return ImageReader(BytesIO(branding.logo_bytes))
+    except Exception:  # noqa: BLE001 - any decode failure skips the logo, never raises.
+        return None
+
+
+def _draw_watermark(canvas: Canvas) -> None:
+    """Diagonal translucent free-tier watermark, drawn across the full page."""
+    canvas.saveState()
+    canvas.translate(PAGE_WIDTH / 2, PAGE_HEIGHT / 2)
+    canvas.rotate(45)
+    canvas.setFillColor(INK)
+    canvas.setFillAlpha(0.08)
+    canvas.setFont("Helvetica-Bold", 40)
+    canvas.drawCentredString(0, 0, WATERMARK_TEXT)
+    canvas.restoreState()
+
+
+def _cover(
+    data: ReportData,
+    styles: dict[str, ParagraphStyle],
+    branding: ReportBrandingData | None = None,
+    watermark: bool = False,
+) -> Callable[[Canvas, Any], None]:
     audit = data.audit
+    accent = (
+        colors.HexColor(branding.primary_color)
+        if branding is not None and branding.primary_color
+        else GREEN
+    )
+    logo = _logo_reader(branding)
 
     def draw(canvas: Canvas, document: Any) -> None:
         canvas.saveState()
         left = PAGE_MARGIN_X + 4 * mm
         right = PAGE_WIDTH - PAGE_MARGIN_X
         width = right - left
-        canvas.setFillColor(GREEN)
+        canvas.setFillColor(accent)
         canvas.rect(0, 0, 6 * mm, PAGE_HEIGHT, stroke=0, fill=1)
 
         top = PAGE_HEIGHT - 28 * mm
-        _brand_mark(canvas, left, top, 9 * mm)
+        mark_size = 9 * mm
+        if branding is not None:
+            if logo is not None:
+                # Any failure here (e.g. a format reportlab's drawImage rejects
+                # at draw time despite ImageReader having decoded it) must not
+                # fail the report; the logo is simply skipped.
+                with contextlib.suppress(Exception):
+                    canvas.drawImage(
+                        logo,
+                        left,
+                        top,
+                        width=mark_size,
+                        height=mark_size,
+                        preserveAspectRatio=True,
+                        mask="auto",
+                    )
+            name_label = branding.firm_name
+        else:
+            _brand_mark(canvas, left, top, mark_size, accent)
+            name_label = "STARTUPVALUE"
         canvas.setFillColor(INK)
         canvas.setFont("Helvetica-Bold", 12)
-        canvas.drawString(left + 12.5 * mm, top + 4.4 * mm, "STARTUPVALUE", charSpace=1.6)
+        canvas.drawString(left + 12.5 * mm, top + 4.4 * mm, name_label, charSpace=1.6)
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(MUTED)
-        canvas.drawString(left + 12.5 * mm, top + 0.4 * mm, "Valuation probabilístico de startups")
+        tagline = (
+            branding.footer_text
+            if branding is not None and branding.footer_text
+            else "Valuation probabilístico de startups"
+        )
+        if branding is None or tagline:
+            canvas.drawString(left + 12.5 * mm, top + 0.4 * mm, tagline)
         badge = "CONFIDENCIAL"
         canvas.setFont("Helvetica-Bold", 7.5)
         badge_w = canvas.stringWidth(badge, "Helvetica-Bold", 7.5) + 11 * 1 + 5 * mm
@@ -191,14 +257,14 @@ def _cover(data: ReportData, styles: dict[str, ParagraphStyle]) -> Callable[[Can
 
         # Title block.
         y = PAGE_HEIGHT - 84 * mm
-        canvas.setFillColor(GREEN)
+        canvas.setFillColor(accent)
         canvas.setFont("Helvetica-Bold", 8.5)
         canvas.drawString(left, y, "RELATÓRIO DE VALUATION", charSpace=1.4)
         canvas.setFillColor(INK)
         canvas.setFont("Helvetica-Bold", 31)
         canvas.drawString(left, y - 14 * mm, "Valuation & Monte Carlo")
         canvas.drawString(left, y - 26 * mm, "Analysis")
-        canvas.setStrokeColor(GREEN)
+        canvas.setStrokeColor(accent)
         canvas.setLineWidth(2)
         canvas.line(left, y - 34 * mm, left + 22 * mm, y - 34 * mm)
         name = Paragraph(escape(data.company.name), styles["cover_company"])
@@ -319,7 +385,7 @@ def _cover(data: ReportData, styles: dict[str, ParagraphStyle]) -> Callable[[Can
             start, end = histogram.edges[0], histogram.edges[-1]
             median = data.valuation.percentiles["p50"]
             x = left + width * min(max((median - start) / (end - start), 0.0), 1.0)
-            canvas.setStrokeColor(GREEN)
+            canvas.setStrokeColor(accent)
             canvas.setLineWidth(0.9)
             canvas.line(x, base_y, x, base_y + height + 3 * mm)
             canvas.setStrokeColor(LINE)
@@ -330,23 +396,37 @@ def _cover(data: ReportData, styles: dict[str, ParagraphStyle]) -> Callable[[Can
             canvas.drawString(
                 x + 1.5 * mm, base_y + height + 1 * mm, "Mediana (P50) dos cenários simulados"
             )
+        if watermark:
+            _draw_watermark(canvas)
         canvas.restoreState()
 
     return draw
 
 
-def _page_chrome(data: ReportData, total: int | None) -> Callable[[Canvas, Any], None]:
+def _page_chrome(
+    data: ReportData,
+    total: int | None,
+    branding: ReportBrandingData | None = None,
+    watermark: bool = False,
+) -> Callable[[Canvas, Any], None]:
     def draw(canvas: Canvas, document: Any) -> None:
         canvas.saveState()
         left, right = PAGE_MARGIN_X, PAGE_WIDTH - PAGE_MARGIN_X
         header_y = PAGE_HEIGHT - 13 * mm
+        brand_label = branding.firm_name if branding is not None else "STARTUPVALUE"
         canvas.setFont("Helvetica-Bold", 6.8)
-        canvas.setFillColor(GREEN)
-        canvas.drawString(left, header_y, "STARTUPVALUE", charSpace=0.9)
-        brand_w = canvas.stringWidth("STARTUPVALUE", "Helvetica-Bold", 6.8) + 11 * 0.9
+        canvas.setFillColor(GREEN if branding is None else INK)
+        canvas.drawString(left, header_y, brand_label, charSpace=0.9)
+        brand_w = canvas.stringWidth(brand_label, "Helvetica-Bold", 6.8) + 11 * 0.9
         canvas.setFont("Helvetica", 6.8)
         canvas.setFillColor(MUTED)
-        canvas.drawString(left + brand_w + 2 * mm, header_y, "Valuation & Monte Carlo Analysis")
+        chrome_tagline = (
+            branding.footer_text
+            if branding is not None and branding.footer_text
+            else "Valuation & Monte Carlo Analysis"
+        )
+        if branding is None or chrome_tagline:
+            canvas.drawString(left + brand_w + 2 * mm, header_y, chrome_tagline)
         context = f"{data.company.scenario_name} · Data-base {_date(data)}"
         canvas.drawRightString(
             right, header_y, _clip(canvas, context, "Helvetica", 6.8, 90 * mm)
@@ -364,13 +444,20 @@ def _page_chrome(data: ReportData, total: int | None) -> Callable[[Canvas, Any],
         canvas.drawString(left, 9.5 * mm, f"CONFIDENCIAL | {footer_name}")
         page = f"Página {document.page}" + (f" de {total}" if total else "")
         canvas.drawRightString(right, 9.5 * mm, f"Simulation {_short_id(data)} | {page}")
+        if watermark:
+            _draw_watermark(canvas)
         canvas.restoreState()
 
     return draw
 
 
 def _document(
-    buffer: BytesIO, data: ReportData, styles: dict[str, ParagraphStyle], total: int | None
+    buffer: BytesIO,
+    data: ReportData,
+    styles: dict[str, ParagraphStyle],
+    total: int | None,
+    branding: ReportBrandingData | None = None,
+    watermark: bool = False,
 ) -> BaseDocTemplate:
     document = BaseDocTemplate(
         buffer,
@@ -396,8 +483,14 @@ def _document(
     )
     document.addPageTemplates(
         [
-            PageTemplate(id="cover", frames=[frame], onPage=_cover(data, styles)),
-            PageTemplate(id="report", frames=[frame], onPage=_page_chrome(data, total)),
+            PageTemplate(
+                id="cover", frames=[frame], onPage=_cover(data, styles, branding, watermark)
+            ),
+            PageTemplate(
+                id="report",
+                frames=[frame],
+                onPage=_page_chrome(data, total, branding, watermark),
+            ),
         ]
     )
     return document
@@ -1190,20 +1283,35 @@ def _styles() -> dict[str, ParagraphStyle]:
     return styles
 
 
-def _render(data: ReportData, total: int | None) -> tuple[bytes, int]:
+def _render(
+    data: ReportData,
+    total: int | None,
+    branding: ReportBrandingData | None = None,
+    watermark: bool = False,
+) -> tuple[bytes, int]:
     styles = _styles()
     buffer = BytesIO()
-    document = _document(buffer, data, styles, total)
+    document = _document(buffer, data, styles, total, branding, watermark)
     document.build(_build_story(data, styles), canvasmaker=_NumberedCanvas)
     return buffer.getvalue(), int(document.page)
 
 
-def build_report_pdf(data: ReportData) -> bytes:
+def build_report_pdf(
+    data: ReportData,
+    *,
+    branding: ReportBrandingData | None = None,
+    watermark: bool = False,
+) -> bytes:
     """Render a deterministic PDF without recalculating any simulation value.
 
     A first pass counts pages so every footer can say "Página N de M".
+
+    ``branding`` swaps the QuantoVale mark/name for a white-label firm's own
+    identity (logo, name, accent color) on the cover and page chrome; audit
+    identifiers and the disclaimer always render regardless. ``watermark``
+    stamps a diagonal, translucent free-tier notice on every page.
     """
-    _, total = _render(data, None)
-    pdf, _ = _render(data, total)
+    _, total = _render(data, None, branding, watermark)
+    pdf, _ = _render(data, total, branding, watermark)
     return pdf
 

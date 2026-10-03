@@ -1,6 +1,6 @@
 """Institutional reports rendered from persisted simulation results."""
 
 from .pdf import build_report_pdf
-from .schema import ReportData
+from .schema import ReportBrandingData, ReportData
 
-__all__ = ["ReportData", "build_report_pdf"]
+__all__ = ["ReportBrandingData", "ReportData", "build_report_pdf"]

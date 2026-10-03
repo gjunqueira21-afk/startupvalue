@@ -249,6 +249,22 @@ class TargetPlanSection(FrozenModel):
     trajectory: tuple[TargetPlanYear, ...] = ()
 
 
+class ReportBrandingData(FrozenModel):
+    """White-label overrides applied to the rendered PDF for entitled workspaces.
+
+    Presentation-only: never persisted by the report layer and never affects
+    any simulated value. ``logo_bytes`` is loaded defensively by the renderer
+    — any decoding failure silently skips the logo rather than failing the
+    report.
+    """
+
+    firm_name: str = Field(min_length=1, max_length=120)
+    primary_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    footer_text: str | None = Field(default=None, max_length=300)
+    logo_bytes: bytes | None = None
+    logo_media_type: str | None = Field(default=None, max_length=32)
+
+
 class ReportData(FrozenModel):
     audit: AuditMetadata
     company: CompanySnapshot

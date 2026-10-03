@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app.api.dependencies import Actor, Database
 from app.core.entitlements import workspace_entitlements
 from app.db.models import (
+    ReportBranding,
     Scenario,
     ScenarioRevision,
     Simulation,
@@ -21,7 +22,7 @@ from app.db.models import (
 from app.decision.target_plan import TargetPlan, base_year_revenue_from_inputs, build_target_plan
 from app.decision.targets import analyze_target
 from app.insights.engine import InsightReport, build_insight, condition_variables
-from app.reports import build_report_pdf
+from app.reports import ReportBrandingData, build_report_pdf
 from app.reports.from_result import report_from_result
 from app.services.audit import record_event
 from app.services.simulation import (
@@ -119,7 +120,20 @@ def download_simulation_report(
         target_plan=target_plan,
         include_multiples=ent.implied_multiples,
     )
-    pdf = build_report_pdf(data)
+    branding_data: ReportBrandingData | None = None
+    if ent.white_label:
+        branding_row = db.scalar(
+            select(ReportBranding).where(ReportBranding.workspace_id == actor.workspace_id)
+        )
+        if branding_row is not None and branding_row.firm_name:
+            branding_data = ReportBrandingData(
+                firm_name=branding_row.firm_name,
+                primary_color=branding_row.primary_color,
+                footer_text=branding_row.footer_text,
+                logo_bytes=branding_row.logo_bytes,
+                logo_media_type=branding_row.logo_media_type,
+            )
+    pdf = build_report_pdf(data, branding=branding_data, watermark=not ent.full_report)
     record_event(
         db,
         action="report.download",
@@ -134,7 +148,7 @@ def download_simulation_report(
         content=pdf,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="startupvalue-{simulation.id}.pdf"',
+            "Content-Disposition": f'attachment; filename="quantovale-{simulation.id}.pdf"',
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
         },
