@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
@@ -59,6 +60,9 @@ class User(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(160))
     password_hash: Mapped[str] = mapped_column(Text)
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_platform_admin: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
 
 class Workspace(TimestampMixin, Base):

@@ -30,6 +30,7 @@ class CurrentActor:
     email: str
     session_id: str
     expires_at: datetime
+    is_platform_admin: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +61,7 @@ def _new_session(
             email=user.email,
             session_id=session.id,
             expires_at=expires_at,
+            is_platform_admin=user.is_platform_admin,
         ),
         token,
     )
@@ -129,6 +131,7 @@ def authenticate(db: Session, plain_token: str) -> CurrentActor | None:
         email=user.email,
         session_id=session.id,
         expires_at=session.expires_at,
+        is_platform_admin=user.is_platform_admin,
     )
 
 

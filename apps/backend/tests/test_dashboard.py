@@ -32,6 +32,7 @@ def _actor(workspace_id: str, user_id: str) -> CurrentActor:
         email="founder@example.com",
         session_id="session",
         expires_at=datetime.now(UTC) + timedelta(days=1),
+        is_platform_admin=False,
     )
 
 

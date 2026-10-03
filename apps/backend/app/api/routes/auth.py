@@ -74,6 +74,7 @@ def _session_response(created: auth_service.CreatedSession) -> SessionResponse:
         email=actor.email,
         role=actor.role.value,
         expires_at=actor.expires_at,
+        is_platform_admin=actor.is_platform_admin,
     )
 
 
@@ -217,6 +218,7 @@ def me(actor: Actor) -> SessionResponse:
         email=actor.email,
         role=actor.role.value,
         expires_at=actor.expires_at,
+        is_platform_admin=actor.is_platform_admin,
     )
 
 

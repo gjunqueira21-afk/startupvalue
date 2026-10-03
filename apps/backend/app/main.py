@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.admin import router as admin_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.branding import router as branding_router
 from app.api.routes.dashboard import router as dashboard_router
@@ -36,6 +37,7 @@ app.include_router(reports_router)
 app.include_router(workspace_router)
 app.include_router(branding_router)
 app.include_router(waitlist_router)
+app.include_router(admin_router)
 
 
 @app.get("/api/v1/meta", tags=["meta"])

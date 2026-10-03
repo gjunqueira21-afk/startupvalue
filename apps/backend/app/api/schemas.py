@@ -43,6 +43,7 @@ class SessionResponse(ApiModel):
     email: str
     role: str
     expires_at: datetime
+    is_platform_admin: bool
 
 
 class MessageResponse(ApiModel):
