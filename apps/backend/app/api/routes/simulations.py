@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import select
+from fastapi import APIRouter, HTTPException, Query, Response, status
+from sqlalchemy import delete, select
 
 from app.api.dependencies import Actor, Database
 from app.api.schemas import (
@@ -27,6 +27,7 @@ from app.api.schemas import (
 )
 from app.core.entitlements import workspace_entitlements
 from app.db.models import (
+    Report,
     Role,
     Scenario,
     ScenarioRevision,
@@ -177,6 +178,55 @@ def read_simulation(simulation_id: str, db: Database, actor: Actor) -> Simulatio
         )
     )
     return _response(db, simulation, result)
+
+
+@router.delete("/simulations/{simulation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_simulation(simulation_id: str, db: Database, actor: Actor) -> Response:
+    """Delete an analysis and its persisted artifacts.
+
+    Destructive: only owner/admin may do this. The underlying
+    Scenario/ScenarioRevision/Startup are untouched -- only the simulation,
+    its result, its private sample vectors and any generated reports die.
+    """
+    if actor.role not in {Role.owner, Role.admin}:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "action_not_allowed")
+    simulation = get_simulation(
+        db, simulation_id=simulation_id, workspace_id=actor.workspace_id
+    )
+    if simulation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "simulation_not_found")
+
+    result = db.scalar(
+        select(SimulationResult).where(
+            SimulationResult.workspace_id == actor.workspace_id,
+            SimulationResult.simulation_id == simulation.id,
+        )
+    )
+    if result is not None:
+        # FK-safe order: children of SimulationResult first, then the
+        # result itself, then the simulation. SimulationSamples carries an
+        # ondelete=CASCADE on this FK, but delete it explicitly too since
+        # that only fires when the database itself enforces foreign keys
+        # (not guaranteed, e.g. on SQLite without the pragma enabled).
+        db.execute(delete(Report).where(Report.simulation_result_id == result.id))
+        db.execute(
+            delete(SimulationSamples).where(
+                SimulationSamples.simulation_result_id == result.id
+            )
+        )
+        db.execute(delete(SimulationResult).where(SimulationResult.id == result.id))
+    db.execute(delete(Simulation).where(Simulation.id == simulation.id))
+
+    record_event(
+        db,
+        action="simulation.deleted",
+        resource_type="simulation",
+        workspace_id=actor.workspace_id,
+        actor_id=actor.user_id,
+        resource_id=simulation.id,
+    )
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _decision_source(
